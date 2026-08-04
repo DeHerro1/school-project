@@ -1,0 +1,33 @@
+{
+  "name": "school-management",
+  "version": "0.1.0",
+  "private": true,
+  "description": "School management system with a parent-engagement portal (final year project)",
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter=./apps/* dev",
+    "dev:api": "pnpm --filter api dev",
+    "dev:school": "pnpm --filter school dev",
+    "dev:parent": "pnpm --filter parent dev",
+    "build": "pnpm -r build",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter api prisma migrate dev",
+    "db:seed": "pnpm --filter api prisma db seed",
+    "db:studio": "pnpm --filter api prisma studio",
+    "db:reset": "pnpm --filter api prisma migrate reset"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.27.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "argon2",
+      "esbuild",
+      "vue-demi"
+    ]
+  }
+}

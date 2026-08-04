@@ -1,0 +1,326 @@
+// School Management System — Prisma schema
+// Enums here are mirrored in packages/shared/src/enums.ts
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  PARENT
+}
+
+enum ClassLevel {
+  NURSERY
+  PRIMARY
+  JUNIOR
+  SENIOR
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+}
+
+enum AlertStatus {
+  PENDING
+  RESPONDED
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+enum Weekday {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  username     String?  @unique
+  passwordHash String
+  role         Role     @default(PARENT)
+  name         String
+  phone        String?
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Teacher relations
+  homeroomOf     Class[]         @relation("HomeroomTeacher")
+  timetableSlots Timetable[]
+  markedAttendance Attendance[]  @relation("MarkedBy")
+  sharedMedia    MediaShare[]
+  progressReports ProgressReport[]
+
+  // Parent relations
+  guardianships Guardianship[]
+
+  // Messaging / notifications (both roles)
+  sentMessages     Message[]      @relation("Sender")
+  receivedMessages Message[]      @relation("Receiver")
+  notifications    Notification[]
+  refreshTokens    RefreshToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Class {
+  id                String     @id @default(cuid())
+  name              String
+  level             ClassLevel
+  homeroomTeacherId String?
+  homeroomTeacher   User?      @relation("HomeroomTeacher", fields: [homeroomTeacherId], references: [id], onDelete: SetNull)
+  // Declared roll count and the subjects offered — editable by admins and staff.
+  studentCount      Int?
+  subjectsOffered   String?
+  createdAt         DateTime   @default(now())
+
+  students     Student[]
+  timetable    Timetable[]
+  promotedInto TermReport[] @relation("PromotedTo")
+  termReports  TermReport[] @relation("ReportClass")
+}
+
+model Subject {
+  id   String  @id @default(cuid())
+  name String
+  code String?
+  // Non-teaching activities (Lunch, Worship, Assembly, …) have no teacher.
+  isActivity Boolean @default(false)
+
+  timetable Timetable[]
+  marks     Mark[]
+}
+
+model Timetable {
+  id        String  @id @default(cuid())
+  classId   String
+  class     Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teacherId String?
+  teacher   User?   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  day       Weekday
+  period    Int
+  startTime String? // "HH:MM"
+  endTime   String? // "HH:MM"
+
+  // A class can't have two slots at the same clock time on the same day, but is
+  // otherwise free to have as many slots per day as needed.
+  @@unique([classId, day, startTime])
+}
+
+model Student {
+  id          String   @id @default(cuid())
+  admissionNo String   @unique
+  firstName   String
+  lastName    String
+  dob         DateTime
+  photoUrl    String?
+  isFirstTime Boolean  @default(false)
+  classId     String?
+  class       Class?   @relation(fields: [classId], references: [id], onDelete: SetNull)
+
+  // Parent / guardian contact details captured at enrolment
+  guardianName            String?
+  guardianPhone           String?
+  secondaryGuardianName   String?
+  secondaryGuardianPhone  String?
+  address                 String? // home address, GPS address, or a landmark
+
+  createdAt   DateTime @default(now())
+
+  guardianships   Guardianship[]
+  attendance      Attendance[]
+  mediaShares     MediaShare[]
+  termReports     TermReport[]
+  progressReports ProgressReport[]
+  invoices        Invoice[]
+}
+
+model Guardianship {
+  id           String @id @default(cuid())
+  parentUserId String
+  parent       User   @relation(fields: [parentUserId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  relation     String @default("Parent")
+
+  @@unique([parentUserId, studentId])
+  @@index([studentId])
+}
+
+model Attendance {
+  id         String           @id @default(cuid())
+  studentId  String
+  student    Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date       DateTime         @db.Date
+  status     AttendanceStatus
+  markedById String
+  markedBy   User             @relation("MarkedBy", fields: [markedById], references: [id])
+  createdAt  DateTime         @default(now())
+
+  alert AbsenceAlert?
+
+  @@unique([studentId, date])
+  @@index([date])
+}
+
+model AbsenceAlert {
+  id           String      @id @default(cuid())
+  attendanceId String      @unique
+  attendance   Attendance  @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  message      String
+  parentReason String?
+  status       AlertStatus @default(PENDING)
+  respondedAt  DateTime?
+  createdAt    DateTime    @default(now())
+}
+
+model MediaShare {
+  id        String   @id @default(cuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacherId String
+  teacher   User     @relation(fields: [teacherId], references: [id])
+  fileUrl   String
+  caption   String?
+  createdAt DateTime @default(now())
+
+  @@index([studentId])
+}
+
+model TermReport {
+  id        String   @id @default(cuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  term      String
+  year      Int
+  fileUrl   String?
+
+  // The class the student was in when this report was written — reports on a
+  // student's details page are grouped by this. Captured at creation time.
+  classId String?
+  class   Class?  @relation("ReportClass", fields: [classId], references: [id], onDelete: SetNull)
+
+  // Class the student is promoted into — only set on the Third (end-of-year) report.
+  promotedToClassId String?
+  promotedToClass   Class?  @relation("PromotedTo", fields: [promotedToClassId], references: [id], onDelete: SetNull)
+
+  // When school reopens for the new year. On/after this date, a student with a
+  // promotion set is automatically moved into `promotedToClass`.
+  reopenDate         DateTime?
+  // Set once the automatic promotion has been applied, so it runs only once.
+  promotionAppliedAt DateTime?
+
+  // Narrative sections written by the class teacher.
+  positionInClass   String?
+  progress          String?
+  interest          String?
+  strength          String?
+  howParentsCanHelp String?
+
+  createdAt DateTime @default(now())
+
+  marks Mark[]
+
+  @@unique([studentId, term, year])
+}
+
+model Mark {
+  id        String     @id @default(cuid())
+  reportId  String
+  report    TermReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject    @relation(fields: [subjectId], references: [id])
+  score     Float
+  grade     String?
+  comment   String?
+}
+
+model ProgressReport {
+  id                String   @id @default(cuid())
+  studentId         String
+  student           Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacherId         String
+  teacher           User     @relation(fields: [teacherId], references: [id])
+  term              String
+  strengths         String
+  talents           String
+  needs             String
+  howParentsCanHelp String
+  createdAt         DateTime @default(now())
+}
+
+model Message {
+  id         String    @id @default(cuid())
+  senderId   String
+  sender     User      @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String
+  receiver   User      @relation("Receiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  body       String
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([senderId, receiverId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String?
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Invoice {
+  id        String        @id @default(cuid())
+  studentId String
+  student   Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  term      String
+  amount    Float
+  dueDate   DateTime
+  status    InvoiceStatus @default(UNPAID)
+  createdAt DateTime      @default(now())
+
+  payments Payment[]
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount    Float
+  method    String   @default("cash")
+  paidAt    DateTime @default(now())
+}

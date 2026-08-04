@@ -1,0 +1,35 @@
+import { Router } from "express";
+import { authRouter } from "./auth";
+import { usersRouter } from "./users";
+import { classesRouter } from "./classes";
+import { subjectsRouter } from "./subjects";
+import { timetableRouter } from "./timetable";
+import { studentsRouter } from "./students";
+import { attendanceRouter } from "./attendance";
+import { alertsRouter } from "./alerts";
+import { mediaRouter } from "./media";
+import { reportsRouter } from "./reports";
+import { progressRouter } from "./progress";
+import { messagesRouter } from "./messages";
+import { notificationsRouter } from "./notifications";
+import { invoicesRouter } from "./invoices";
+import { statsRouter } from "./stats";
+
+export const apiRouter = Router();
+
+apiRouter.get("/health", (_req, res) => res.json({ ok: true }));
+apiRouter.use("/stats", statsRouter);
+apiRouter.use("/auth", authRouter);
+apiRouter.use("/users", usersRouter);
+apiRouter.use("/classes", classesRouter);
+apiRouter.use("/subjects", subjectsRouter);
+apiRouter.use("/timetable", timetableRouter);
+apiRouter.use("/students", studentsRouter);
+apiRouter.use("/attendance", attendanceRouter);
+apiRouter.use("/absence-alerts", alertsRouter);
+apiRouter.use("/media", mediaRouter);
+apiRouter.use("/reports", reportsRouter);
+apiRouter.use("/progress", progressRouter);
+apiRouter.use("/messages", messagesRouter);
+apiRouter.use("/notifications", notificationsRouter);
+apiRouter.use("/invoices", invoicesRouter);

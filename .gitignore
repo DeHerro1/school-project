@@ -1,0 +1,22 @@
+node_modules/
+dist/
+.output/
+.nuxt/
+.data/
+.env
+*.local
+*.log
+logs/
+
+# Prisma
+apps/api/prisma/*.db
+
+# Uploaded files (student photos, report PDFs)
+apps/api/uploads/*
+!apps/api/uploads/.gitkeep
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

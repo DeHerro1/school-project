@@ -1,0 +1,5 @@
+/* Tailwind v4 + shared theme */
+@import "@repo/ui/style.css";
+
+/* Scan this app's source for class names */
+@source "../../";
