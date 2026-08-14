@@ -10,7 +10,7 @@
 // Password for every seeded account is "password123".
 // -----------------------------------------------------------------------------
 
-import { Role } from "./enums";
+import { Role, SchoolStatus } from "./enums";
 
 export const MOCK_PASSWORD = "password123";
 
@@ -24,6 +24,26 @@ export interface MockUser {
   phone: string | null;
   avatarUrl: string | null;
   createdAt: string;
+  // Tenant this user belongs to. Every ADMIN/TEACHER/PARENT account is scoped
+  // to exactly one school — see schools-backoffice for how schools are created.
+  schoolId: string;
+}
+export interface MockSchool {
+  id: string;
+  name: string;
+  slug: string;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  logoUrl: string | null;
+  status: SchoolStatus;
+  createdAt: string;
+}
+export interface MockPlatformAdmin {
+  id: string;
+  email: string;
+  name: string;
+  createdAt: string;
 }
 interface MockClass {
   id: string;
@@ -32,13 +52,15 @@ interface MockClass {
   homeroomTeacherId: string | null;
   studentCount: number | null;
   subjectsOffered: string | null;
+  schoolId: string;
 }
-interface MockSubject { id: string; name: string; code: string | null; isActivity: boolean }
+interface MockSubject { id: string; name: string; code: string | null; isActivity: boolean; schoolId: string }
 interface MockStudent {
   id: string; admissionNo: string; firstName: string; lastName: string; dob: string;
   isFirstTime: boolean; classId: string | null; guardianName: string | null;
   guardianPhone: string | null; secondaryGuardianName: string | null;
   secondaryGuardianPhone: string | null; address: string | null; photoUrl: string | null;
+  schoolId: string;
 }
 interface MockGuardianship { id: string; parentUserId: string; studentId: string; relation: string }
 interface MockSlot {
@@ -74,6 +96,9 @@ interface MockNotification {
 }
 
 interface MockDb {
+  schools: MockSchool[];
+  platformAdmins: MockPlatformAdmin[];
+  platformPasswords: Record<string, string>;
   users: MockUser[];
   passwords: Record<string, string>;
   classes: MockClass[];
@@ -136,10 +161,32 @@ function buildDb(): MockDb {
   const now = new Date();
   const iso = (d: Date) => d.toISOString();
 
+  // ---- school (tenant) + platform admin ----
+  // The seeded demo school every existing account belongs to. Schools created
+  // later through schools-backoffice start empty (no classes/students seeded).
+  const school: MockSchool = {
+    id: "sch-1",
+    name: "Sunrise International School",
+    slug: "sunrise",
+    email: "office@sunrise.test",
+    phone: "0244000000",
+    address: "12 Palm Avenue, East Legon",
+    logoUrl: null,
+    status: SchoolStatus.ACTIVE,
+    createdAt: iso(now),
+  };
+  const schools: MockSchool[] = [school];
+
+  const platformAdmins: MockPlatformAdmin[] = [
+    { id: "pa-1", email: "owner@backoffice.test", name: "Platform Owner", createdAt: iso(now) },
+  ];
+  const platformPasswords: Record<string, string> = { "pa-1": MOCK_PASSWORD };
+
   const mkUser = (
     id: string, email: string, username: string | null, name: string, role: Role, phone: string,
+    schoolId: string = school.id,
   ): MockUser => {
-    const u: MockUser = { id, email, username, name, role, phone, avatarUrl: null, createdAt: iso(now) };
+    const u: MockUser = { id, email, username, name, role, phone, avatarUrl: null, createdAt: iso(now), schoolId };
     users.push(u);
     passwords[id] = MOCK_PASSWORD;
     return u;
@@ -185,11 +232,11 @@ function buildDb(): MockDb {
     ["ICT", "ICT"], ["Ghanaian Language", "GHL"], ["Physical Education", "PE"], ["Music", "MUS"],
   ];
   const teachingSubjects: MockSubject[] = subjectSeed.map(([name, code], i) => ({
-    id: `sub-${i + 1}`, name, code, isActivity: false,
+    id: `sub-${i + 1}`, name, code, isActivity: false, schoolId: school.id,
   }));
   const subjectAt = (i: number): MockSubject => teachingSubjects[i % teachingSubjects.length]!;
-  const lunch: MockSubject = { id: "sub-lunch", name: "Lunch", code: null, isActivity: true };
-  const worship: MockSubject = { id: "sub-worship", name: "Worship", code: null, isActivity: true };
+  const lunch: MockSubject = { id: "sub-lunch", name: "Lunch", code: null, isActivity: true, schoolId: school.id };
+  const worship: MockSubject = { id: "sub-worship", name: "Worship", code: null, isActivity: true, schoolId: school.id };
   const subjects = [...teachingSubjects, lunch, worship];
   const subjectNames = teachingSubjects.map((s) => s.name);
 
@@ -220,6 +267,7 @@ function buildDb(): MockDb {
     homeroomTeacherId: teacherAt(i).id,
     studentCount: 20 + ((i * 3) % 18),
     subjectsOffered: def.subjects.join(", "),
+    schoolId: school.id,
   }));
   const classAt = (i: number): MockClass => classes[i]!;
 
@@ -269,6 +317,7 @@ function buildDb(): MockDb {
         secondaryGuardianPhone: k % 2 === 0 ? "0209990000" : "0209991111",
         address: pick(addresses, ci + k),
         photoUrl: null,
+        schoolId: school.id,
       };
       students.push(s);
       studentParent[id] = parent;
@@ -497,6 +546,7 @@ function buildDb(): MockDb {
   ];
 
   return {
+    schools, platformAdmins, platformPasswords,
     users, passwords, classes, subjects, students, guardianships, slots, attendance,
     alerts, media, termReports, marks, progress, invoices, payments, messages, notifications,
   };
@@ -521,7 +571,21 @@ function fail(status: number, error: string): never {
 const pub = (u: MockUser) => ({
   id: u.id, email: u.email, username: u.username, name: u.name,
   role: u.role, phone: u.phone, avatarUrl: u.avatarUrl, createdAt: u.createdAt,
+  schoolId: u.schoolId,
 });
+const pubPlatformAdmin = (a: MockPlatformAdmin) => ({
+  id: a.id, email: a.email, name: a.name, createdAt: a.createdAt,
+});
+function schoolFull(d: MockDb, s: MockSchool) {
+  return {
+    ...s,
+    counts: {
+      students: d.students.filter((x) => x.schoolId === s.id).length,
+      staff: d.users.filter((x) => x.schoolId === s.id && x.role !== Role.PARENT).length,
+      classes: d.classes.filter((x) => x.schoolId === s.id).length,
+    },
+  };
+}
 const teacherRef = (d: MockDb, id: string | null) => {
   const u = d.users.find((x) => x.id === id);
   return u ? { id: u.id, name: u.name } : null;
@@ -655,7 +719,9 @@ function readForm(body: unknown, key: string): string | undefined {
 }
 const dayOrder = (day: string): number => ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].indexOf(day);
 
-export interface MockSessionUser { id: string; role: Role; name: string }
+// `role` is absent for a platform-admin session (schools-backoffice) — those
+// accounts live outside the school/parent Role enum entirely.
+export interface MockSessionUser { id: string; role?: Role; name: string; schoolId?: string | null }
 
 // ---------------------------------------------------------------- router -----
 export async function handleMockRequest(
@@ -681,6 +747,113 @@ export async function handleMockRequest(
   const sid = q.studentId ?? "";
 
   const need = (): MockSessionUser => (user ? user : fail(401, "Not authenticated"));
+  // Routes under /platform and /schools are for schools-backoffice only — a
+  // separate login, decoupled from the ADMIN/TEACHER/PARENT Role model above.
+  const needPlatform = (): MockPlatformAdmin => {
+    const u = need();
+    const a = d.platformAdmins.find((p) => p.id === u.id);
+    if (!a) return fail(403, "Platform admin access required");
+    return a;
+  };
+
+  // ---------------- platform (schools-backoffice) auth ----------------
+  if (path === "/platform/auth/login" && m === "POST") {
+    const { email, password } = body ?? {};
+    const found = d.platformAdmins.find((a) => a.email === email);
+    if (!found || d.platformPasswords[found.id] !== password) return fail(401, "Invalid credentials");
+    return { admin: pubPlatformAdmin(found), ...fakeTokens() };
+  }
+  if (path === "/platform/auth/refresh" && m === "POST") {
+    const a = d.platformAdmins.find((x) => x.id === user?.id);
+    if (!a) return fail(401, "Session expired, please log in again");
+    return { admin: pubPlatformAdmin(a), ...fakeTokens() };
+  }
+  if (path === "/platform/auth/logout" && m === "POST") return null;
+  if (path === "/platform/auth/me" && m === "GET") {
+    return { admin: pubPlatformAdmin(needPlatform()) };
+  }
+
+  // ---------------- schools (schools-backoffice) ----------------
+  if (path === "/schools" && m === "GET") {
+    needPlatform();
+    const list = [...d.schools]
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      .map((s) => schoolFull(d, s));
+    return { schools: list };
+  }
+  if (path === "/schools" && m === "POST") {
+    needPlatform();
+    const name = (body?.name ?? "").trim();
+    if (!name) fail(400, "School name is required");
+    const slug =
+      (body?.slug?.trim() || name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") ||
+      nextId("school");
+    if (d.schools.some((s) => s.slug === slug)) fail(409, "A school with that slug already exists");
+    if (!body?.adminEmail || !body?.adminUsername || !body?.adminPassword || !body?.adminName) {
+      fail(400, "The school's first admin account (name, username, email, password) is required");
+    }
+    if (d.users.some((u) => u.email === body.adminEmail || u.username === body.adminUsername)) {
+      fail(409, "A record with these details already exists.");
+    }
+    const newSchool: MockSchool = {
+      id: nextId("sch"), name, slug,
+      email: body.email || null, phone: body.phone || null, address: body.address || null,
+      logoUrl: null, status: SchoolStatus.ACTIVE, createdAt: nowIso,
+    };
+    d.schools.push(newSchool);
+    const admin: MockUser = {
+      id: nextId("u"), email: body.adminEmail, username: body.adminUsername, name: body.adminName,
+      role: Role.ADMIN, phone: body.adminPhone || null, avatarUrl: null, createdAt: nowIso,
+      schoolId: newSchool.id,
+    };
+    d.users.push(admin);
+    d.passwords[admin.id] = body.adminPassword;
+    return { school: schoolFull(d, newSchool), admin: pub(admin) };
+  }
+  if (seg[0] === "schools" && seg.length === 2 && m === "GET") {
+    needPlatform();
+    const s = d.schools.find((x) => x.id === seg1);
+    if (!s) return fail(404, "School not found");
+    return {
+      school: schoolFull(d, s),
+      staff: d.users.filter((u) => u.schoolId === s.id && u.role !== Role.PARENT).map(pub),
+    };
+  }
+  if (seg[0] === "schools" && seg.length === 2 && m === "PATCH") {
+    needPlatform();
+    const s = d.schools.find((x) => x.id === seg1);
+    if (!s) return fail(404, "School not found");
+    if (body.name !== undefined) s.name = body.name;
+    if (body.email !== undefined) s.email = body.email || null;
+    if (body.phone !== undefined) s.phone = body.phone || null;
+    if (body.address !== undefined) s.address = body.address || null;
+    if (body.status !== undefined) s.status = body.status;
+    return { school: schoolFull(d, s) };
+  }
+  if (seg[0] === "schools" && seg.length === 2 && m === "DELETE") {
+    needPlatform();
+    const s = d.schools.find((x) => x.id === seg1);
+    if (!s) return fail(404, "School not found");
+    // Cascade: remove everything scoped to this tenant.
+    const studentIds = new Set(d.students.filter((x) => x.schoolId === s.id).map((x) => x.id));
+    const userIds = new Set(d.users.filter((x) => x.schoolId === s.id).map((x) => x.id));
+    const classIds = new Set(d.classes.filter((x) => x.schoolId === s.id).map((x) => x.id));
+    d.schools = d.schools.filter((x) => x.id !== s.id);
+    d.users = d.users.filter((x) => x.schoolId !== s.id);
+    d.classes = d.classes.filter((x) => x.schoolId !== s.id);
+    d.subjects = d.subjects.filter((x) => x.schoolId !== s.id);
+    d.students = d.students.filter((x) => x.schoolId !== s.id);
+    d.guardianships = d.guardianships.filter((x) => !studentIds.has(x.studentId));
+    d.slots = d.slots.filter((x) => !classIds.has(x.classId));
+    d.attendance = d.attendance.filter((x) => !studentIds.has(x.studentId));
+    d.media = d.media.filter((x) => !studentIds.has(x.studentId));
+    d.termReports = d.termReports.filter((x) => !studentIds.has(x.studentId));
+    d.progress = d.progress.filter((x) => !studentIds.has(x.studentId));
+    d.invoices = d.invoices.filter((x) => !studentIds.has(x.studentId));
+    d.messages = d.messages.filter((x) => !userIds.has(x.senderId) && !userIds.has(x.receiverId));
+    d.notifications = d.notifications.filter((x) => !userIds.has(x.userId));
+    return null;
+  }
 
   // ---------------- auth ----------------
   if (path === "/auth/login" && m === "POST") {
@@ -692,11 +865,12 @@ export async function handleMockRequest(
     return { user: pub(found), ...fakeTokens() };
   }
   if (path === "/auth/register" && m === "POST") {
-    const { email, password, name, phone } = body ?? {};
+    const { email, password, name, phone, schoolId } = body ?? {};
     if (d.users.some((u) => u.email === email)) fail(409, "A record with these details already exists.");
+    const targetSchool = (schoolId && d.schools.find((s) => s.id === schoolId)) || d.schools[0]!;
     const u: MockUser = {
       id: nextId("u"), email, username: null, name, role: Role.PARENT,
-      phone: phone ?? null, avatarUrl: null, createdAt: nowIso,
+      phone: phone ?? null, avatarUrl: null, createdAt: nowIso, schoolId: targetSchool.id,
     };
     d.users.push(u);
     d.passwords[u.id] = password;
@@ -724,14 +898,15 @@ export async function handleMockRequest(
     return { students: list };
   }
   if (path === "/students" && m === "GET") {
-    need();
+    const u = need();
     const list = d.students
-      .filter((s) => (q.classId ? s.classId === q.classId : true))
+      .filter((s) => s.schoolId === u.schoolId && (q.classId ? s.classId === q.classId : true))
       .sort((a, b) => a.firstName.localeCompare(b.firstName))
       .map((s) => studentFull(d, s));
     return { students: list };
   }
   if (path === "/students" && m === "POST") {
+    const u = need();
     const s: MockStudent = {
       id: nextId("st"),
       admissionNo: body.admissionNo || `ADM-2026-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -741,7 +916,7 @@ export async function handleMockRequest(
       guardianName: body.guardianName ?? null, guardianPhone: body.guardianPhone ?? null,
       secondaryGuardianName: body.secondaryGuardianName ?? null,
       secondaryGuardianPhone: body.secondaryGuardianPhone ?? null,
-      address: body.address ?? null, photoUrl: null,
+      address: body.address ?? null, photoUrl: null, schoolId: u.schoolId!,
     };
     d.students.push(s);
     return { student: studentFull(d, s) };
@@ -781,40 +956,46 @@ export async function handleMockRequest(
   if (seg[0] === "students" && seg.length === 2 && m === "GET") {
     const u = need();
     if (u.role === Role.PARENT) assertOwns(d, u.id, seg1);
-    const s = d.students.find((x) => x.id === seg1);
+    const s = d.students.find((x) => x.id === seg1 && x.schoolId === u.schoolId);
     if (!s) return fail(404, "Student not found");
     return { student: studentFull(d, s) };
   }
   if (seg[0] === "students" && seg.length === 2 && m === "PATCH") {
-    const s = d.students.find((x) => x.id === seg1);
+    const u = need();
+    const s = d.students.find((x) => x.id === seg1 && x.schoolId === u.schoolId);
     if (!s) return fail(404, "Student not found");
     Object.assign(s, body);
     return { student: studentFull(d, s) };
   }
   if (seg[0] === "students" && seg.length === 2 && m === "DELETE") {
-    d.students = d.students.filter((x) => x.id !== seg1);
+    const u = need();
+    d.students = d.students.filter((x) => !(x.id === seg1 && x.schoolId === u.schoolId));
     return null;
   }
 
   // ---------------- classes ----------------
   if (path === "/classes" && m === "GET") {
-    need();
-    const list = [...d.classes]
+    const u = need();
+    const list = d.classes
+      .filter((c) => c.schoolId === u.schoolId)
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((c) => classFull(d, c));
     return { classes: list };
   }
   if (path === "/classes" && m === "POST") {
+    const u = need();
     const c: MockClass = {
       id: nextId("cls"), name: body.name, level: body.level,
       homeroomTeacherId: body.homeroomTeacherId ?? null,
       studentCount: body.studentCount ?? null, subjectsOffered: body.subjectsOffered ?? null,
+      schoolId: u.schoolId!,
     };
     d.classes.push(c);
     return { class: classFull(d, c) };
   }
   if (seg[0] === "classes" && seg[1] && m === "GET") {
-    const c = d.classes.find((x) => x.id === seg1);
+    const u = need();
+    const c = d.classes.find((x) => x.id === seg1 && x.schoolId === u.schoolId);
     if (!c) return fail(404, "Class not found");
     return {
       class: {
@@ -826,36 +1007,47 @@ export async function handleMockRequest(
     };
   }
   if (seg[0] === "classes" && seg[1] && m === "PATCH") {
-    const c = d.classes.find((x) => x.id === seg1);
+    const u = need();
+    const c = d.classes.find((x) => x.id === seg1 && x.schoolId === u.schoolId);
     if (!c) return fail(404, "Class not found");
     Object.assign(c, body);
     return { class: classFull(d, c) };
   }
   if (seg[0] === "classes" && seg[1] && m === "DELETE") {
-    d.classes = d.classes.filter((x) => x.id !== seg1);
+    const u = need();
+    d.classes = d.classes.filter((x) => !(x.id === seg1 && x.schoolId === u.schoolId));
     return null;
   }
 
   // ---------------- subjects ----------------
   if (path === "/subjects" && m === "GET") {
-    need();
-    return { subjects: [...d.subjects].sort((a, b) => a.name.localeCompare(b.name)) };
+    const u = need();
+    return {
+      subjects: d.subjects
+        .filter((s) => s.schoolId === u.schoolId)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    };
   }
   if (path === "/subjects" && m === "POST") {
-    const s: MockSubject = { id: nextId("sub"), name: body.name, code: body.code ?? null, isActivity: !!body.isActivity };
+    const u = need();
+    const s: MockSubject = {
+      id: nextId("sub"), name: body.name, code: body.code ?? null, isActivity: !!body.isActivity,
+      schoolId: u.schoolId!,
+    };
     d.subjects.push(s);
     return { subject: s };
   }
   if (seg[0] === "subjects" && seg[1] && m === "PATCH") {
-    need();
-    const s = d.subjects.find((x) => x.id === seg1);
+    const u = need();
+    const s = d.subjects.find((x) => x.id === seg1 && x.schoolId === u.schoolId);
     if (!s) return fail(404, "Subject not found");
     if (body.name !== undefined) s.name = body.name;
     if (body.code !== undefined) s.code = body.code;
     return { subject: s };
   }
   if (seg[0] === "subjects" && seg[1] && m === "DELETE") {
-    d.subjects = d.subjects.filter((x) => x.id !== seg1);
+    const u = need();
+    d.subjects = d.subjects.filter((x) => !(x.id === seg1 && x.schoolId === u.schoolId));
     return null;
   }
 
@@ -870,8 +1062,9 @@ export async function handleMockRequest(
     if (u.role === Role.PARENT && !q.studentId && parentStudentIds(d, u.id).length === 0) {
       return { slots: [] };
     }
+    const ownClassIds = new Set(d.classes.filter((c) => c.schoolId === u.schoolId).map((c) => c.id));
     const list = d.slots
-      .filter((s) => (classId ? s.classId === classId : true))
+      .filter((s) => (classId ? s.classId === classId : ownClassIds.has(s.classId)))
       .sort((a, b) => (a.day === b.day ? a.period - b.period : dayOrder(a.day) - dayOrder(b.day)))
       .map((s) => ({
         ...s, subject: subjectRef(d, s.subjectId), teacher: teacherRef(d, s.teacherId), class: classRef(d, s.classId),
@@ -919,10 +1112,11 @@ export async function handleMockRequest(
     return { date: isoDate, students: list };
   }
   if (path === "/attendance/summary" && m === "GET") {
-    need();
+    const u = need();
     const date = q.date ? dateOnly(new Date(q.date)) : dateOnly(new Date());
     const isoDate = date.toISOString();
-    const list = [...d.classes]
+    const list = d.classes
+      .filter((c) => c.schoolId === u.schoolId)
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((c) => {
         const ids = d.students.filter((s) => s.classId === c.id).map((s) => s.id);
@@ -1143,27 +1337,36 @@ export async function handleMockRequest(
 
   // ---------------- stats ----------------
   if (path === "/stats/overview" && m === "GET") {
-    need();
+    const u = need();
     const todayIso = dateOnly(new Date()).toISOString();
     const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
     const todayDay = days[new Date().getUTCDay()];
-    const todayAttendance = d.attendance.filter((a) => a.date === todayIso);
+    const ownStudentIds = new Set(d.students.filter((s) => s.schoolId === u.schoolId).map((s) => s.id));
+    const ownClassIds = new Set(d.classes.filter((c) => c.schoolId === u.schoolId).map((c) => c.id));
+    const todayAttendance = d.attendance.filter((a) => a.date === todayIso && ownStudentIds.has(a.studentId));
     const presentStudents = todayAttendance.filter((a) => a.status === "PRESENT" || a.status === "LATE").length;
     const absentStudents = todayAttendance.filter((a) => a.status === "ABSENT").length;
-    const totalTeachers = d.users.filter((u) => u.role === Role.TEACHER).length;
+    const totalTeachers = d.users.filter((x) => x.role === Role.TEACHER && x.schoolId === u.schoolId).length;
     const scheduledTeacherIds = new Set(
-      d.slots.filter((s) => s.day === todayDay && s.teacherId).map((s) => s.teacherId!),
+      d.slots
+        .filter((s) => s.day === todayDay && s.teacherId && ownClassIds.has(s.classId))
+        .map((s) => s.teacherId!),
     );
     const availableTeachers = scheduledTeacherIds.size;
+    const pendingAlerts = d.alerts.filter((a) => {
+      if (a.status !== "PENDING") return false;
+      const att = d.attendance.find((x) => x.id === a.attendanceId);
+      return !!att && ownStudentIds.has(att.studentId);
+    }).length;
     return {
       totalTeachers,
       availableTeachers,
       unavailableTeachers: Math.max(0, totalTeachers - availableTeachers),
-      totalStudents: d.students.length,
+      totalStudents: ownStudentIds.size,
       presentStudents,
       absentStudents,
-      totalClasses: d.classes.length,
-      pendingAlerts: d.alerts.filter((a) => a.status === "PENDING").length,
+      totalClasses: ownClassIds.size,
+      pendingAlerts,
     };
   }
 
@@ -1175,7 +1378,7 @@ export async function handleMockRequest(
         : u.role === Role.TEACHER ? [Role.PARENT, Role.ADMIN]
           : [Role.PARENT, Role.TEACHER, Role.ADMIN];
     const contacts = d.users
-      .filter((x) => wanted.includes(x.role) && x.id !== u.id)
+      .filter((x) => wanted.includes(x.role) && x.id !== u.id && x.schoolId === u.schoolId)
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((x) => ({ id: x.id, name: x.name, role: x.role, avatarUrl: x.avatarUrl }));
     return { contacts };
@@ -1210,35 +1413,40 @@ export async function handleMockRequest(
 
   // ---------------- users ----------------
   if (path === "/users" && m === "GET") {
-    need();
+    const me = need();
     const list = d.users
-      .filter((u) => (q.role ? u.role === q.role : true))
+      .filter((u) => u.schoolId === me.schoolId && (q.role ? u.role === q.role : true))
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
       .map(pub);
     return { users: list };
   }
   if (path === "/users" && m === "POST") {
+    const me = need();
     const u: MockUser = {
       id: nextId("u"), email: body.email, username: body.username || null, name: body.name,
       role: body.role, phone: body.phone ?? null, avatarUrl: null, createdAt: nowIso,
+      schoolId: me.schoolId!,
     };
     d.users.push(u);
     d.passwords[u.id] = body.password;
     return { user: pub(u) };
   }
   if (seg[0] === "users" && seg[2] === "avatar" && m === "POST") {
-    const u = d.users.find((x) => x.id === seg1);
+    const me = need();
+    const u = d.users.find((x) => x.id === seg1 && x.schoolId === me.schoolId);
     if (!u) return fail(404, "User not found");
     u.avatarUrl = photo(u.name, 260);
     return { user: pub(u) };
   }
   if (seg[0] === "users" && seg[1] && m === "GET") {
-    const u = d.users.find((x) => x.id === seg1);
+    const me = need();
+    const u = d.users.find((x) => x.id === seg1 && x.schoolId === me.schoolId);
     if (!u) return fail(404, "User not found");
     return { user: pub(u) };
   }
   if (seg[0] === "users" && seg[1] && m === "PATCH") {
-    const u = d.users.find((x) => x.id === seg1);
+    const me = need();
+    const u = d.users.find((x) => x.id === seg1 && x.schoolId === me.schoolId);
     if (!u) return fail(404, "User not found");
     if (body.name !== undefined) u.name = body.name;
     if (body.phone !== undefined) u.phone = body.phone;
@@ -1246,7 +1454,8 @@ export async function handleMockRequest(
     return { user: pub(u) };
   }
   if (seg[0] === "users" && seg[1] && m === "DELETE") {
-    d.users = d.users.filter((x) => x.id !== seg1);
+    const me = need();
+    d.users = d.users.filter((x) => !(x.id === seg1 && x.schoolId === me.schoolId));
     return null;
   }
 

@@ -57,3 +57,11 @@ export const Weekday = {
   FRI: "FRI",
 } as const;
 export type Weekday = (typeof Weekday)[keyof typeof Weekday];
+
+// A school registered through the schools-backoffice portal. SUSPENDED schools
+// keep their data but their staff/parents can no longer sign in.
+export const SchoolStatus = {
+  ACTIVE: "ACTIVE",
+  SUSPENDED: "SUSPENDED",
+} as const;
+export type SchoolStatus = (typeof SchoolStatus)[keyof typeof SchoolStatus];

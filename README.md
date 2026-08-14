@@ -16,9 +16,10 @@ PostgreSQL + Prisma, and Socket.IO**.
 ```
 final-project/
 ├─ apps/
-│  ├─ api/       Express + Prisma + Socket.IO (TypeScript)   → http://localhost:3001
-│  ├─ school/    Nuxt 4 — admin + teacher portal             → http://localhost:3000
-│  └─ parent/    Nuxt 4 — parent portal                      → http://localhost:3002
+│  ├─ api/                Express + Prisma + Socket.IO (TypeScript)               → http://localhost:3001
+│  ├─ school/              Nuxt 4 — admin + teacher portal                        → http://localhost:3000
+│  ├─ parent/              Nuxt 4 — parent portal                                 → http://localhost:3002
+│  └─ schools-backoffice/  Nuxt 4 — platform admin portal (add/edit/suspend schools) → http://localhost:3003
 ├─ packages/
 │  ├─ shared/    Zod schemas, enums, socket events (shared by API + apps)
 │  └─ ui/        Shared shadcn-style Vue components + Tailwind v4 theme
@@ -70,14 +71,16 @@ Then open:
 |-----|-----|-----|
 | School portal | http://localhost:3000 | Admins & teachers |
 | Parent portal | http://localhost:3002 | Parents |
+| Schools backoffice | http://localhost:3003 | Platform admins (add/edit/suspend schools) |
 | API | http://localhost:3001/api | — |
 
 ### Run apps individually
 
 ```bash
-pnpm dev:api      # just the API
-pnpm dev:school   # just the school portal
-pnpm dev:parent   # just the parent portal
+pnpm dev:api                  # just the API
+pnpm dev:school                # just the school portal
+pnpm dev:parent                # just the parent portal
+pnpm dev:schools-backoffice    # just the schools backoffice
 ```
 
 ---
@@ -92,6 +95,7 @@ Password for **all** accounts: `password123`
 | Teacher | `sarah@school.test` | Homeroom of Nursery A |
 | Parent | `john@parent.test` | Children: **Tunde** (first-time) & **Ada** |
 | Parent | `mary@parent.test` | Child: **Zainab** — starts with a **pending absence alert** |
+| Platform admin | `owner@backoffice.test` | Schools backoffice — add/edit/suspend schools |
 
 ---
 
@@ -113,6 +117,18 @@ Password for **all** accounts: `password123`
 
 4. **Fees, timetable, messaging** round out the platform, all scoped per child.
 
+5. **Onboard a new school (multi-tenant)**
+   - As **Platform Owner** (schools backoffice, `owner@backoffice.test`) → *Schools* → **Add school** →
+     fill in the school's details and its first admin account.
+   - The new school appears with its own (initially empty) student/staff/class counts, completely
+     separate from Sunrise International School's — every tenant-scoped mock route filters by
+     `schoolId`. Suspend it from the detail page and note its status update live.
+   - **Known limitation of the mock layer**: each portal (school/parent/schools-backoffice) is a
+     separate Nuxt app with its own in-memory mock database, so a school (and admin account) created
+     in the backoffice only exists in *that browser tab* — signing in to the school portal as the new
+     admin won't find it there. This is a mock-only artifact, not a tenant-isolation bug; wiring a
+     portal to the real `apps/api` (one shared Postgres database) removes it.
+
 Notifications and photo/alert events are pushed in real time over **Socket.IO** (the bell badge
 updates live).
 
@@ -131,6 +147,15 @@ pnpm --filter api typecheck
 
 ## Architecture notes
 
+- **Frontends run on a mock data layer.** `school`, `parent` and `schools-backoffice` all route
+  `useApi()` through an in-browser mock (`@repo/shared` → `mock.ts`) instead of calling `apps/api`
+  over HTTP — the whole demo runs with `pnpm dev`, no Postgres required. `apps/api` (Prisma +
+  Express) mirrors the same routes and is the intended production backend; reconnect a portal to it
+  by swapping `useApi()` back to an `$fetch.create({ baseURL })` client.
+- **Multi-tenancy**: every school is a `School` row; `User`, `Class`, `Subject` and `Student` each
+  carry a `schoolId`. Platform admins (schools-backoffice) are a separate account model with their
+  own login — decoupled from the `ADMIN`/`TEACHER`/`PARENT` `Role` used by the school/parent portals
+  — and are the only accounts that can create, edit or suspend a `School`.
 - **Auth**: JWT access + rotating refresh tokens (argon2 password hashing). Two SPA portals share
   one stateless API; each guards its own role (`ADMIN`/`TEACHER` for school, `PARENT` for parent).
 - **Authorization**: parents are scoped to their own children via `Guardianship`; every parent-facing
