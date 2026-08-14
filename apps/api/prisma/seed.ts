@@ -1,5 +1,6 @@
-import { PrismaClient, Prisma } from "@prisma/client";
-import argon2 from "argon2";
+import { PrismaClient, Prisma, Role } from "@prisma/client";
+import { provisionUser } from "../src/lib/provisionUser";
+import { supabaseAdmin } from "../src/lib/supabase";
 
 const prisma = new PrismaClient();
 const PASSWORD = "password123";
@@ -27,9 +28,10 @@ function recentWeekdays(count: number): Date[] {
 
 async function main() {
   console.log("Seeding database…");
-  const passwordHash = await argon2.hash(PASSWORD);
 
-  // Wipe (dev only) — order respects FKs.
+  // Wipe (dev only) — order respects FKs. User rows are Supabase Auth-backed
+  // now (see lib/provisionUser.ts), so wipe Supabase Auth users too, not just
+  // the Prisma rows, or re-seeding will collide on already-used emails.
   await prisma.payment.deleteMany();
   await prisma.invoice.deleteMany();
   await prisma.progressReport.deleteMany();
@@ -42,15 +44,20 @@ async function main() {
   await prisma.timetable.deleteMany();
   await prisma.message.deleteMany();
   await prisma.notification.deleteMany();
-  await prisma.refreshToken.deleteMany();
   await prisma.student.deleteMany();
   await prisma.subject.deleteMany();
   await prisma.class.deleteMany();
+  const existingUsers = await prisma.user.findMany({ select: { id: true } });
   await prisma.user.deleteMany();
+  for (const u of existingUsers) {
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(u.id);
+    if (error) console.warn(`Could not delete Supabase Auth user ${u.id}:`, error.message);
+  }
 
   // ---------------------------------------------------------------- Users ----
-  const admin = await prisma.user.create({
-    data: { email: "admin@school.test", username: "admin", passwordHash, name: "Ama Mensah (Head)", role: "ADMIN", phone: "0244000000" },
+  const admin = await provisionUser({
+    email: "admin@school.test", username: "admin", password: PASSWORD,
+    name: "Ama Mensah (Head)", role: Role.ADMIN, phone: "0244000000",
   });
 
   // Additional administrative staff (bursar, registrar, etc.).
@@ -61,7 +68,7 @@ async function main() {
   ];
   const admins = [admin];
   for (const a of adminSeed) {
-    admins.push(await prisma.user.create({ data: { ...a, passwordHash, role: "ADMIN" } }));
+    admins.push(await provisionUser({ ...a, password: PASSWORD, role: Role.ADMIN }));
   }
 
   const teacherSeed = [
@@ -80,9 +87,7 @@ async function main() {
   ];
   const teachers = [];
   for (const t of teacherSeed) {
-    teachers.push(
-      await prisma.user.create({ data: { ...t, passwordHash, role: "TEACHER" } }),
-    );
+    teachers.push(await provisionUser({ ...t, password: PASSWORD, role: Role.TEACHER }));
   }
   const teacher = teachers[0]; // Sarah — homeroom of the demo nursery class
 
@@ -100,9 +105,7 @@ async function main() {
   ];
   const parents = [];
   for (const p of parentSeed) {
-    parents.push(
-      await prisma.user.create({ data: { ...p, passwordHash, role: "PARENT" } }),
-    );
+    parents.push(await provisionUser({ ...p, password: PASSWORD, role: Role.PARENT }));
   }
   const [john, mary] = parents;
 

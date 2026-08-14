@@ -1,11 +1,12 @@
 import { Router } from "express";
-import argon2 from "argon2";
 import { createUserSchema, updateUserSchema, Role } from "@repo/shared";
 import { prisma } from "../lib/prisma";
+import { supabaseAdmin } from "../lib/supabase";
+import { provisionUser } from "../lib/provisionUser";
 import { authGuard } from "../middleware/auth";
 import { validate } from "../middleware/validate";
 import { asyncHandler, AppError } from "../middleware/error";
-import { uploadImage, publicFileUrl } from "../lib/upload";
+import { uploadImage, storageUrl } from "../lib/upload";
 
 export const usersRouter = Router();
 
@@ -42,9 +43,9 @@ usersRouter.post(
   validate(createUserSchema),
   asyncHandler(async (req, res) => {
     const { email, password, name, phone, role, username } = req.body;
-    const passwordHash = await argon2.hash(password);
-    const user = await prisma.user.create({
-      data: { email, passwordHash, name, phone, role, username: username || null },
+    const created = await provisionUser({ email, password, name, phone, role, username });
+    const user = await prisma.user.findUniqueOrThrow({
+      where: { id: created.id },
       select: userSelect,
     });
     res.status(201).json({ user });
@@ -70,13 +71,13 @@ usersRouter.patch(
   validate(updateUserSchema),
   asyncHandler(async (req, res) => {
     const { name, phone, password } = req.body;
+    if (password) {
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(req.params.id, { password });
+      if (error) throw new AppError(400, error.message);
+    }
     const user = await prisma.user.update({
       where: { id: req.params.id },
-      data: {
-        name,
-        phone,
-        ...(password ? { passwordHash: await argon2.hash(password) } : {}),
-      },
+      data: { name, phone },
       select: userSelect,
     });
     res.json({ user });
@@ -90,9 +91,10 @@ usersRouter.post(
   uploadImage.single("file"),
   asyncHandler(async (req, res) => {
     if (!req.file) throw new AppError(400, "No image uploaded");
+    const avatarUrl = await storageUrl(req.file);
     const user = await prisma.user.update({
       where: { id: req.params.id },
-      data: { avatarUrl: publicFileUrl(req.file.filename) },
+      data: { avatarUrl },
       select: userSelect,
     });
     res.json({ user });
@@ -104,6 +106,10 @@ usersRouter.delete(
   authGuard([Role.ADMIN]),
   asyncHandler(async (req, res) => {
     await prisma.user.delete({ where: { id: req.params.id } });
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(req.params.id);
+    if (error) {
+      console.error(`Failed to delete Supabase Auth user ${req.params.id} after Prisma delete`, error);
+    }
     res.status(204).end();
   }),
 );

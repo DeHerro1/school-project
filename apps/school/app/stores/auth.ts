@@ -9,39 +9,34 @@ export interface AuthUser {
   role: Role;
   phone?: string | null;
   avatarUrl?: string | null;
+  schoolId?: string | null;
 }
 
 interface AuthState {
   user: AuthUser | null;
-  accessToken: string | null;
-  refreshToken: string | null;
   ready: boolean;
 }
 
+// Caches the profile only — the Supabase SDK (see useSupabase.ts) owns the
+// actual session/token lifecycle (persistence, auto-refresh) in its own
+// storage. This cache just avoids a network round trip to re-fetch the
+// profile on every page load; auth.client.ts reconciles it against the
+// SDK's real session on startup.
 const STORAGE_KEY = "school-auth";
 
 export const useAuthStore = defineStore("auth", {
   state: (): AuthState => ({
     user: null,
-    accessToken: null,
-    refreshToken: null,
     ready: false,
   }),
   getters: {
-    isAuthenticated: (s) => !!s.accessToken && !!s.user,
+    isAuthenticated: (s) => !!s.user,
     role: (s) => s.user?.role ?? null,
   },
   actions: {
     persist() {
       if (import.meta.client) {
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify({
-            user: this.user,
-            accessToken: this.accessToken,
-            refreshToken: this.refreshToken,
-          }),
-        );
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ user: this.user }));
       }
     },
     restore() {
@@ -49,10 +44,7 @@ export const useAuthStore = defineStore("auth", {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) {
           try {
-            const parsed = JSON.parse(raw);
-            this.user = parsed.user;
-            this.accessToken = parsed.accessToken;
-            this.refreshToken = parsed.refreshToken;
+            this.user = JSON.parse(raw).user ?? null;
           } catch {
             /* ignore */
           }
@@ -60,16 +52,12 @@ export const useAuthStore = defineStore("auth", {
       }
       this.ready = true;
     },
-    setSession(payload: { user: AuthUser; accessToken: string; refreshToken: string }) {
-      this.user = payload.user;
-      this.accessToken = payload.accessToken;
-      this.refreshToken = payload.refreshToken;
+    setUser(user: AuthUser) {
+      this.user = user;
       this.persist();
     },
     clear() {
       this.user = null;
-      this.accessToken = null;
-      this.refreshToken = null;
       if (import.meta.client) localStorage.removeItem(STORAGE_KEY);
     },
   },

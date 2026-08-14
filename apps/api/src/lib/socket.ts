@@ -1,48 +1,25 @@
-import { Server as IOServer } from "socket.io";
-import type { Server as HttpServer } from "node:http";
 import { SocketEvents, userRoom } from "@repo/shared";
-import { env } from "./env";
 import { prisma } from "./prisma";
-import { verifyAccessToken } from "./jwt";
+import { supabaseAdmin } from "./supabase";
 
-let io: IOServer | null = null;
-
-export function initSocket(httpServer: HttpServer): IOServer {
-  io = new IOServer(httpServer, {
-    cors: { origin: env.corsOrigins, credentials: true },
-  });
-
-  // Authenticate every connection using the access token.
-  io.use((socket, next) => {
-    const token =
-      (socket.handshake.auth?.token as string | undefined) ??
-      socket.handshake.headers.authorization?.replace("Bearer ", "");
-    if (!token) return next(new Error("unauthorized"));
-    try {
-      const payload = verifyAccessToken(token);
-      socket.data.userId = payload.sub;
-      next();
-    } catch {
-      next(new Error("unauthorized"));
-    }
-  });
-
-  io.on("connection", (socket) => {
-    const userId = socket.data.userId as string;
-    socket.join(userRoom(userId));
-  });
-
-  return io;
-}
-
-/** Emit a raw event to a single user's room. */
+/**
+ * Push a real-time event to a single user via a Supabase Realtime broadcast
+ * channel (replaces the old Socket.IO `emitTo`). `userRoom(userId)` still
+ * names the channel, same as it named the Socket.IO room before — clients
+ * subscribe to that same channel name (see apps/*/app/composables/useRealtime.ts).
+ */
 export function emitTo(userId: string, event: string, payload: unknown) {
-  io?.to(userRoom(userId)).emit(event, payload);
+  void supabaseAdmin.channel(userRoom(userId)).send({
+    type: "broadcast",
+    event,
+    payload,
+  });
 }
 
 /**
- * Persist a Notification row and push it to the user in real time.
- * Reused by every feature that alerts a user.
+ * Persist a Notification row and push it to the user in real time. Reused
+ * by every feature that alerts a user — signature unchanged from before the
+ * Supabase migration, so none of its callers needed to change.
  */
 export async function notify(opts: {
   userId: string;

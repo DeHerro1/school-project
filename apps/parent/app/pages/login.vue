@@ -4,11 +4,8 @@ import { Heart } from "lucide-vue-next";
 import {
   Card, CardHeader, CardTitle, CardDescription, CardContent, Button, Input, Label, Alert,
 } from "@repo/ui";
-import { useAuthStore } from "~/stores/auth";
-
 definePageMeta({ layout: "auth" });
 
-const auth = useAuthStore();
 const api = useApi();
 const { login } = useAuth();
 
@@ -27,11 +24,13 @@ async function submit() {
     if (mode.value === "login") {
       await login(email.value, password.value);
     } else {
-      const res = await api<any>("/auth/register", {
+      await api("/auth/register", {
         method: "POST",
         body: { name: name.value, email: email.value, password: password.value, phone: phone.value || undefined },
       });
-      auth.setSession(res);
+      // Registration creates the account but doesn't establish a session
+      // (Supabase Auth requires an explicit sign-in) — log in right after.
+      await login(email.value, password.value);
     }
     await navigateTo("/");
   } catch (e) {

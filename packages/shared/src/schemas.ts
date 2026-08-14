@@ -57,10 +57,6 @@ export const registerSchema = z.object({
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
 
-export const refreshSchema = z.object({
-  refreshToken: z.string().min(10),
-});
-
 // ---------- Users ----------
 // Admins create accounts. Staff (teacher/admin) sign in with a username, so it
 // is required for those roles; parents keep signing in with their email.
@@ -80,7 +76,7 @@ export const updateUserSchema = z.object({
 export const createClassSchema = z.object({
   name: z.string().min(1),
   level: classLevelEnum,
-  homeroomTeacherId: z.string().cuid().optional(),
+  homeroomTeacherId: z.string().uuid().optional(),
   studentCount: z.number().int().min(0).optional(),
   subjectsOffered: z.string().max(500).optional(),
 });
@@ -107,7 +103,7 @@ export const createTimetableSlotSchema = z.object({
   classId: z.string().cuid(),
   subjectId: z.string().cuid(),
   // Optional: activity slots (Lunch, Worship, …) have no teacher.
-  teacherId: z.string().cuid().optional(),
+  teacherId: z.string().uuid().optional(),
   day: weekdayEnum,
   period: z.number().int().min(1).max(12),
   startTime: timeString,
@@ -120,7 +116,7 @@ export const createTimetableSlotSchema = z.object({
 // fixed, and `teacherId` may be nulled to turn a slot into a teacher-less activity.
 export const updateTimetableSlotSchema = z.object({
   subjectId: z.string().cuid().optional(),
-  teacherId: z.string().cuid().nullable().optional(),
+  teacherId: z.string().uuid().nullable().optional(),
   day: weekdayEnum.optional(),
   period: z.number().int().min(1).max(12).optional(),
   startTime: timeString.optional(),
@@ -146,7 +142,7 @@ export const createStudentSchema = z.object({
 export const updateStudentSchema = createStudentSchema.partial();
 
 export const linkGuardianSchema = z.object({
-  parentUserId: z.string().cuid(),
+  parentUserId: z.string().uuid(),
   studentId: z.string().cuid(),
   relation: z.string().min(2).default("Parent"),
 });
@@ -225,7 +221,7 @@ export const createProgressReportSchema = z.object({
 
 // ---------- Messaging ----------
 export const sendMessageSchema = z.object({
-  receiverId: z.string().cuid(),
+  receiverId: z.string().uuid(),
   body: z.string().min(1).max(2000),
 });
 

@@ -4,7 +4,7 @@ import { prisma } from "../lib/prisma";
 import { authGuard } from "../middleware/auth";
 import { validate } from "../middleware/validate";
 import { asyncHandler, AppError } from "../middleware/error";
-import { uploadDoc, publicFileUrl } from "../lib/upload";
+import { uploadDoc, storageUrl } from "../lib/upload";
 import { assertParentOwnsStudent, guardianUserIds } from "../services/access";
 import { notify, emitTo } from "../lib/socket";
 
@@ -134,9 +134,10 @@ reportsRouter.post(
   uploadDoc.single("file"),
   asyncHandler(async (req, res) => {
     if (!req.file) throw new AppError(400, "No file uploaded");
+    const fileUrl = await storageUrl(req.file);
     const report = await prisma.termReport.update({
       where: { id: req.params.id },
-      data: { fileUrl: publicFileUrl(req.file.filename) },
+      data: { fileUrl },
     });
     res.json({ report });
   }),

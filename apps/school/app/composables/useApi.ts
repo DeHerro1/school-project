@@ -1,32 +1,25 @@
-import { useAuthStore } from "~/stores/auth";
-import { handleMockRequest } from "@repo/shared";
+import { useSupabase } from "./useSupabase";
 
 /**
- * Front-end-only API client.
- *
- * Instead of calling the backend over HTTP, every request is routed to an
- * in-memory mock (see `@repo/shared` → mock.ts) so the whole app runs with no
- * server and no database. The call signature matches the `$fetch` instance this
- * replaced — `api<T>(path, { method, body })` — so no page or composable needed
- * to change.
- *
- * To reconnect a real backend later, restore the `$fetch.create({ baseURL })`
- * version and delete this mock wiring.
+ * API client — calls the real Express API, attaching the current Supabase
+ * session's access token as a bearer token. Same call signature as before
+ * (`api<T>(path, { method, body })`), so no page/composable needed to change.
  */
 export function useApi() {
-  const auth = useAuthStore();
+  const config = useRuntimeConfig();
+  const supabase = useSupabase();
 
   async function api<T = any>(
     request: string,
     options?: { method?: string; body?: any },
   ): Promise<T> {
-    const method = options?.method ?? "GET";
-    const sessionUser = auth.user
-      ? { id: auth.user.id, role: auth.user.role, name: auth.user.name }
-      : null;
-    // A touch of latency so spinners/loading states behave like a real network.
-    await new Promise((r) => setTimeout(r, 60));
-    return (await handleMockRequest(method, request, options?.body, sessionUser)) as T;
+    const { data } = await supabase.auth.getSession();
+    return await $fetch<T>(request, {
+      baseURL: `${config.public.apiBase}/api`,
+      method: (options?.method as any) ?? "GET",
+      body: options?.body,
+      headers: data.session ? { Authorization: `Bearer ${data.session.access_token}` } : undefined,
+    });
   }
 
   return api;

@@ -18,16 +18,16 @@ export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: Number(process.env.PORT ?? 3001),
   databaseUrl: required("DATABASE_URL"),
-  jwt: {
-    accessSecret: required("JWT_ACCESS_SECRET", "dev-access-secret"),
-    refreshSecret: required("JWT_REFRESH_SECRET", "dev-refresh-secret"),
-    accessTtl: process.env.JWT_ACCESS_TTL ?? "15m",
-    refreshTtl: process.env.JWT_REFRESH_TTL ?? "7d",
+  supabase: {
+    url: required("SUPABASE_URL"),
+    anonKey: required("SUPABASE_ANON_KEY"),
+    serviceRoleKey: required("SUPABASE_SERVICE_ROLE_KEY"),
+    jwtSecret: required("SUPABASE_JWT_SECRET"),
+    storageBucket: process.env.SUPABASE_STORAGE_BUCKET ?? "school-files",
   },
   corsOrigins: (process.env.CORS_ORIGINS ?? "http://localhost:3000,http://localhost:3002")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),
-  uploadDir: process.env.UPLOAD_DIR ?? "uploads",
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB ?? 10),
 };

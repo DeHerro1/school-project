@@ -6,8 +6,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -48,17 +49,21 @@ enum Weekday {
   FRI
 }
 
+// User.id is NOT auto-generated — it always equals the Supabase Auth
+// (auth.users.id) UUID for that account, set at creation time by
+// lib/provisionUser.ts. This table is the app's "profile" for a Supabase
+// Auth identity: role, name, and every other business relation live here;
+// Supabase Auth owns credentials/sessions and is not represented in Prisma.
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  username     String?  @unique
-  passwordHash String
-  role         Role     @default(PARENT)
-  name         String
-  phone        String?
-  avatarUrl    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @db.Uuid
+  email     String   @unique
+  username  String?  @unique
+  role      Role     @default(PARENT)
+  name      String
+  phone     String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Teacher relations
   homeroomOf     Class[]         @relation("HomeroomTeacher")
@@ -74,25 +79,13 @@ model User {
   sentMessages     Message[]      @relation("Sender")
   receivedMessages Message[]      @relation("Receiver")
   notifications    Notification[]
-  refreshTokens    RefreshToken[]
-}
-
-model RefreshToken {
-  id        String   @id @default(cuid())
-  token     String   @unique
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  @@index([userId])
 }
 
 model Class {
   id                String     @id @default(cuid())
   name              String
   level             ClassLevel
-  homeroomTeacherId String?
+  homeroomTeacherId String?    @db.Uuid
   homeroomTeacher   User?      @relation("HomeroomTeacher", fields: [homeroomTeacherId], references: [id], onDelete: SetNull)
   // Declared roll count and the subjects offered — editable by admins and staff.
   studentCount      Int?
@@ -122,7 +115,7 @@ model Timetable {
   class     Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
   subjectId String
   subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  teacherId String?
+  teacherId String? @db.Uuid
   teacher   User?   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   day       Weekday
   period    Int
@@ -164,7 +157,7 @@ model Student {
 
 model Guardianship {
   id           String @id @default(cuid())
-  parentUserId String
+  parentUserId String @db.Uuid
   parent       User   @relation(fields: [parentUserId], references: [id], onDelete: Cascade)
   studentId    String
   student      Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -180,7 +173,7 @@ model Attendance {
   student    Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
   date       DateTime         @db.Date
   status     AttendanceStatus
-  markedById String
+  markedById String           @db.Uuid
   markedBy   User             @relation("MarkedBy", fields: [markedById], references: [id])
   createdAt  DateTime         @default(now())
 
@@ -205,7 +198,7 @@ model MediaShare {
   id        String   @id @default(cuid())
   studentId String
   student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  teacherId String
+  teacherId String   @db.Uuid
   teacher   User     @relation(fields: [teacherId], references: [id])
   fileUrl   String
   caption   String?
@@ -266,7 +259,7 @@ model ProgressReport {
   id                String   @id @default(cuid())
   studentId         String
   student           Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  teacherId         String
+  teacherId         String   @db.Uuid
   teacher           User     @relation(fields: [teacherId], references: [id])
   term              String
   strengths         String
@@ -278,9 +271,9 @@ model ProgressReport {
 
 model Message {
   id         String    @id @default(cuid())
-  senderId   String
+  senderId   String    @db.Uuid
   sender     User      @relation("Sender", fields: [senderId], references: [id], onDelete: Cascade)
-  receiverId String
+  receiverId String    @db.Uuid
   receiver   User      @relation("Receiver", fields: [receiverId], references: [id], onDelete: Cascade)
   body       String
   readAt     DateTime?
@@ -291,7 +284,7 @@ model Message {
 
 model Notification {
   id        String    @id @default(cuid())
-  userId    String
+  userId    String    @db.Uuid
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   type      String
   title     String

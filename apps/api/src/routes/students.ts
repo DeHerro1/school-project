@@ -9,7 +9,7 @@ import { prisma } from "../lib/prisma";
 import { authGuard } from "../middleware/auth";
 import { validate } from "../middleware/validate";
 import { asyncHandler, AppError } from "../middleware/error";
-import { uploadImage, publicFileUrl } from "../lib/upload";
+import { uploadImage, storageUrl } from "../lib/upload";
 import { assertParentOwnsStudent, assertTeacherOwnsClass, guardianUserIds } from "../services/access";
 import { notify } from "../lib/socket";
 
@@ -127,9 +127,10 @@ studentsRouter.post(
   uploadImage.single("file"),
   asyncHandler(async (req, res) => {
     if (!req.file) throw new AppError(400, "No image uploaded");
+    const photoUrl = await storageUrl(req.file);
     const student = await prisma.student.update({
       where: { id: req.params.id },
-      data: { photoUrl: publicFileUrl(req.file.filename) },
+      data: { photoUrl },
     });
     res.json({ student });
   }),

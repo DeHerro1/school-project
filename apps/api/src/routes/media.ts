@@ -4,7 +4,7 @@ import { prisma } from "../lib/prisma";
 import { authGuard } from "../middleware/auth";
 import { validate } from "../middleware/validate";
 import { asyncHandler, AppError } from "../middleware/error";
-import { uploadImage, publicFileUrl } from "../lib/upload";
+import { uploadImage, storageUrl } from "../lib/upload";
 import { assertParentOwnsStudent, guardianUserIds } from "../services/access";
 import { notify, emitTo } from "../lib/socket";
 
@@ -38,12 +38,13 @@ mediaRouter.post(
   asyncHandler(async (req, res) => {
     if (!req.file) throw new AppError(400, "No image uploaded");
     const { studentId, caption } = req.body;
+    const fileUrl = await storageUrl(req.file);
 
     const share = await prisma.mediaShare.create({
       data: {
         studentId,
         teacherId: req.user!.sub,
-        fileUrl: publicFileUrl(req.file.filename),
+        fileUrl,
         caption,
       },
     });
