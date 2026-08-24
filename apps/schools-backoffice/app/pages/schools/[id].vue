@@ -2,8 +2,9 @@
 import { ref, onMounted } from "vue";
 import { ArrowLeft, GraduationCap, Users, BookOpen, Pencil, Trash2, Ban, CheckCircle2 } from "lucide-vue-next";
 import {
-  Card, CardHeader, CardTitle, CardContent, Button, Input, Label, Modal, Badge, Avatar, Spinner,
+  Card, CardHeader, CardTitle, CardContent, Button, Input, Label, Modal, Badge, Avatar,
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell, EmptyState, useToast,
+  Skeleton, SkeletonStatGrid, SkeletonLines, SkeletonList,
 } from "@repo/ui";
 import { SchoolStatus } from "@repo/shared";
 
@@ -103,7 +104,14 @@ async function remove() {
       <ArrowLeft class="size-4" /> Back to schools
     </NuxtLink>
 
-    <div v-if="loading" class="flex justify-center py-20"><Spinner class="size-8 text-primary" /></div>
+    <div v-if="loading">
+      <Skeleton class="h-8 w-52" />
+      <div class="mt-4"><SkeletonStatGrid :count="3" /></div>
+      <div class="mt-6 grid gap-6 lg:grid-cols-2">
+        <Card><CardContent class="pt-5"><SkeletonLines :lines="4" /></CardContent></Card>
+        <Card><CardContent class="pt-5"><SkeletonList :rows="4" /></CardContent></Card>
+      </div>
+    </div>
 
     <template v-else-if="school">
       <PageHeader :title="school.name" :subtitle="`/${school.slug}`">

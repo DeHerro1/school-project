@@ -573,9 +573,6 @@ const pub = (u: MockUser) => ({
   role: u.role, phone: u.phone, avatarUrl: u.avatarUrl, createdAt: u.createdAt,
   schoolId: u.schoolId,
 });
-const pubPlatformAdmin = (a: MockPlatformAdmin) => ({
-  id: a.id, email: a.email, name: a.name, createdAt: a.createdAt,
-});
 function schoolFull(d: MockDb, s: MockSchool) {
   return {
     ...s,
@@ -720,8 +717,20 @@ function readForm(body: unknown, key: string): string | undefined {
 const dayOrder = (day: string): number => ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"].indexOf(day);
 
 // `role` is absent for a platform-admin session (schools-backoffice) — those
-// accounts live outside the school/parent Role enum entirely.
-export interface MockSessionUser { id: string; role?: Role; name: string; schoolId?: string | null }
+// accounts live outside the school/parent Role enum entirely. `isPlatformAdmin`
+// is set once schools-backoffice's real Firebase-Auth login (see
+// apps/schools-backoffice/server/api/platform-admins/**) has verified the
+// caller against its own `platformAdmins` Firestore collection — the mock's
+// `needPlatform()` below trusts that verification instead of re-checking
+// identity against its own seed list.
+export interface MockSessionUser {
+  id: string;
+  role?: Role;
+  name: string;
+  email?: string;
+  schoolId?: string | null;
+  isPlatformAdmin?: boolean;
+}
 
 // ---------------------------------------------------------------- router -----
 export async function handleMockRequest(
@@ -747,31 +756,20 @@ export async function handleMockRequest(
   const sid = q.studentId ?? "";
 
   const need = (): MockSessionUser => (user ? user : fail(401, "Not authenticated"));
-  // Routes under /platform and /schools are for schools-backoffice only — a
-  // separate login, decoupled from the ADMIN/TEACHER/PARENT Role model above.
+  // Routes under /schools are for schools-backoffice only — a separate login,
+  // decoupled from the ADMIN/TEACHER/PARENT Role model above. Platform-admin
+  // login/logout itself is no longer mocked here — schools-backoffice signs
+  // in against real Firebase Auth and its own `platformAdmins` Firestore
+  // collection (see apps/schools-backoffice/server/api/platform-admins/**);
+  // this just trusts the `isPlatformAdmin` flag that login flow stamps onto
+  // the session, with the old seeded list kept as a fallback.
   const needPlatform = (): MockPlatformAdmin => {
     const u = need();
+    if (u.isPlatformAdmin) return { id: u.id, email: u.email ?? "", name: u.name, createdAt: nowIso };
     const a = d.platformAdmins.find((p) => p.id === u.id);
     if (!a) return fail(403, "Platform admin access required");
     return a;
   };
-
-  // ---------------- platform (schools-backoffice) auth ----------------
-  if (path === "/platform/auth/login" && m === "POST") {
-    const { email, password } = body ?? {};
-    const found = d.platformAdmins.find((a) => a.email === email);
-    if (!found || d.platformPasswords[found.id] !== password) return fail(401, "Invalid credentials");
-    return { admin: pubPlatformAdmin(found), ...fakeTokens() };
-  }
-  if (path === "/platform/auth/refresh" && m === "POST") {
-    const a = d.platformAdmins.find((x) => x.id === user?.id);
-    if (!a) return fail(401, "Session expired, please log in again");
-    return { admin: pubPlatformAdmin(a), ...fakeTokens() };
-  }
-  if (path === "/platform/auth/logout" && m === "POST") return null;
-  if (path === "/platform/auth/me" && m === "GET") {
-    return { admin: pubPlatformAdmin(needPlatform()) };
-  }
 
   // ---------------- schools (schools-backoffice) ----------------
   if (path === "/schools" && m === "GET") {

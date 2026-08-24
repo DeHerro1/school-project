@@ -2,14 +2,16 @@ import { useAuthStore } from "~/stores/auth";
 import { handleMockRequest } from "@repo/shared";
 
 /**
- * Front-end-only API client.
+ * Front-end-only API client — for schools CRUD only (`/schools*`).
  *
- * Instead of calling the backend over HTTP, every request is routed to an
- * in-memory mock (see `@repo/shared` → mock.ts) so the whole app runs with no
- * server and no database — same pattern as the school and parent portals.
- * The session passed through is a platform admin, not a school/parent user,
- * so it carries no `role`/`schoolId` — the mock's `/platform/*` and
- * `/schools*` routes authenticate it against a separate admin table.
+ * Instead of calling a backend over HTTP, every request is routed to an
+ * in-memory mock (see `@repo/shared` → mock.ts) so this part of the app runs
+ * with no server and no database. Login and admin management
+ * (server/api/platform-admins/**) are real (see useAuth.ts /
+ * usePlatformAdminsApi.ts) — this composable just forwards the now-real,
+ * Firebase-verified admin identity into the mock via `isPlatformAdmin`, so
+ * `needPlatform()` there trusts it without also knowing about the mock's own
+ * seeded admin table.
  *
  * To reconnect a real backend later, restore the `$fetch.create({ baseURL })`
  * version and delete this mock wiring.
@@ -22,7 +24,9 @@ export function useApi() {
     options?: { method?: string; body?: any },
   ): Promise<T> {
     const method = options?.method ?? "GET";
-    const sessionUser = auth.admin ? { id: auth.admin.id, name: auth.admin.name } : null;
+    const sessionUser = auth.admin
+      ? { id: auth.admin.id, name: auth.admin.name, email: auth.admin.email, isPlatformAdmin: true }
+      : null;
     // A touch of latency so spinners/loading states behave like a real network.
     await new Promise((r) => setTimeout(r, 60));
     return (await handleMockRequest(method, request, options?.body, sessionUser)) as T;

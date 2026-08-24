@@ -2,7 +2,7 @@
 import { ref, onMounted } from "vue";
 import { Plus, Trash2, Pencil, Building2 } from "lucide-vue-next";
 import {
-  Card, Button, Input, Label, Modal, Badge, Spinner,
+  Card, Button, Input, Label, Modal, Badge, SkeletonTable,
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell, useToast,
 } from "@repo/ui";
 import { SchoolStatus } from "@repo/shared";
@@ -51,7 +51,7 @@ async function create() {
         adminPhone: form.value.adminPhone || undefined,
       },
     });
-    toast({ title: "School created", description: "Its first admin can now sign in to the school portal.", variant: "success" });
+    toast({ title: "School created", description: "Its first admin can now sign in to EduCore.", variant: "success" });
     showAdd.value = false;
     form.value = emptyForm();
     await load();
@@ -142,7 +142,7 @@ async function remove() {
       <template #actions><Button @click="showAdd = true"><Plus class="size-4" /> Add school</Button></template>
     </PageHeader>
 
-    <div v-if="loading" class="flex justify-center py-16"><Spinner class="size-7 text-primary" /></div>
+    <SkeletonTable v-if="loading" :rows="5" :cols="5" />
     <template v-else>
       <!-- Mobile: stacked cards -->
       <div class="space-y-3 md:hidden">
@@ -228,7 +228,7 @@ async function remove() {
     </template>
 
     <!-- Create: school + its first admin -->
-    <Modal v-model:open="showAdd" title="Add a school" description="Registers the school and creates its first admin account for the school portal.">
+    <Modal v-model:open="showAdd" title="Add a school" description="Registers the school and creates its first admin account for EduCore.">
       <form class="space-y-4" @submit.prevent="create">
         <div class="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <Building2 class="size-4" /> School details

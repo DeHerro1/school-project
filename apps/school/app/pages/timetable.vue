@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from "vue";
 import { Plus, Pencil, Trash2, CalendarDays } from "lucide-vue-next";
 import {
-  Button, Select, Modal, Label, Input, Spinner, EmptyState, useToast,
+  Button, Select, Modal, Label, Input, Skeleton, EmptyState, useToast, Alert,
   TimetableCalendar,
 } from "@repo/ui";
 import { Weekday } from "@repo/shared";
@@ -36,6 +36,8 @@ const form = ref({
   endTime: "08:45",
   repeat: false,
 });
+const formError = ref("");
+const fieldErrors = ref<Record<string, string>>({});
 
 onMounted(async () => {
   const [c, s] = await Promise.all([
@@ -77,6 +79,8 @@ const editForm = ref({
   startTime: "08:00",
   endTime: "08:45",
 });
+const editFormError = ref("");
+const editFieldErrors = ref<Record<string, string>>({});
 
 // Activity subjects (Lunch, Worship, …) don't need a teacher.
 const isActivity = (subjectId: string) =>
@@ -101,6 +105,8 @@ async function loadSlots() {
 
 async function create() {
   saving.value = true;
+  formError.value = "";
+  fieldErrors.value = {};
   try {
     const res = await api("/timetable", {
       method: "POST",
@@ -119,7 +125,9 @@ async function create() {
     showAdd.value = false;
     await loadSlots();
   } catch (e) {
-    toast({ title: "Failed", description: apiError(e), variant: "destructive" });
+    const fields = apiFieldErrors(e);
+    if (fields) fieldErrors.value = fields;
+    else formError.value = apiError(e);
   } finally {
     saving.value = false;
   }
@@ -134,12 +142,16 @@ function openEdit(slot: any) {
     startTime: slot.startTime ?? "08:00",
     endTime: slot.endTime ?? "08:45",
   };
+  editFormError.value = "";
+  editFieldErrors.value = {};
   showEdit.value = true;
 }
 
 async function update() {
   if (!editingId.value) return;
   saving.value = true;
+  editFormError.value = "";
+  editFieldErrors.value = {};
   try {
     await api(`/timetable/${editingId.value}`, {
       method: "PATCH",
@@ -157,7 +169,9 @@ async function update() {
     showEdit.value = false;
     await loadSlots();
   } catch (e) {
-    toast({ title: "Failed", description: apiError(e), variant: "destructive" });
+    const fields = apiFieldErrors(e);
+    if (fields) editFieldErrors.value = fields;
+    else editFormError.value = apiError(e);
   } finally {
     saving.value = false;
   }
@@ -175,12 +189,14 @@ async function remove(id: string) {
       <template #actions>
         <div class="flex w-full gap-2 sm:w-auto">
           <Select v-model="classId" :options="classOptions" class="flex-1 sm:w-48" @update:model-value="loadSlots" />
-          <Button v-if="canEdit" class="shrink-0" @click="showAdd = true"><Plus class="size-4" /> Add slot</Button>
+          <Button v-if="canEdit" class="shrink-0" @click="formError = ''; fieldErrors = {}; showAdd = true"><Plus class="size-4" /> Add slot</Button>
         </div>
       </template>
     </PageHeader>
 
-    <div v-if="loading" class="flex justify-center py-16"><Spinner class="size-7 text-primary" /></div>
+    <div v-if="loading" class="grid grid-cols-5 gap-2">
+      <Skeleton v-for="i in 25" :key="i" class="h-16 rounded-lg" />
+    </div>
 
     <EmptyState
       v-else-if="!classId"
@@ -231,6 +247,7 @@ async function remove(id: string) {
 
     <Modal v-model:open="showAdd" title="Add timetable slot">
       <form class="space-y-3" @submit.prevent="create">
+        <Alert v-if="formError" variant="destructive">{{ formError }}</Alert>
         <div class="space-y-1.5"><Label>Subject</Label><Select v-model="form.subjectId" :options="subjectOptions" /></div>
         <p v-if="selectedIsActivity" class="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
           This is an activity — no teacher is assigned.
@@ -241,11 +258,23 @@ async function remove(id: string) {
         </p>
         <div class="grid grid-cols-2 gap-3">
           <div v-if="!form.repeat" class="space-y-1.5"><Label>Day</Label><Select v-model="form.day" :options="dayOptions" /></div>
-          <div class="space-y-1.5"><Label>Period</Label><Input v-model="form.period" type="number" min="1" max="12" /></div>
+          <div class="space-y-1.5">
+            <Label>Period</Label>
+            <Input v-model="form.period" type="number" min="1" max="12" :class="fieldErrors.period ? 'border-destructive' : ''" />
+            <p v-if="fieldErrors.period" class="text-xs text-destructive">{{ fieldErrors.period }}</p>
+          </div>
         </div>
         <div class="grid grid-cols-2 gap-3">
-          <div class="space-y-1.5"><Label>From</Label><Input v-model="form.startTime" type="time" required /></div>
-          <div class="space-y-1.5"><Label>To</Label><Input v-model="form.endTime" type="time" required /></div>
+          <div class="space-y-1.5">
+            <Label>From</Label>
+            <Input v-model="form.startTime" type="time" required :class="fieldErrors.startTime ? 'border-destructive' : ''" />
+            <p v-if="fieldErrors.startTime" class="text-xs text-destructive">{{ fieldErrors.startTime }}</p>
+          </div>
+          <div class="space-y-1.5">
+            <Label>To</Label>
+            <Input v-model="form.endTime" type="time" required :class="fieldErrors.endTime ? 'border-destructive' : ''" />
+            <p v-if="fieldErrors.endTime" class="text-xs text-destructive">{{ fieldErrors.endTime }}</p>
+          </div>
         </div>
         <label class="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm">
           <input v-model="form.repeat" type="checkbox" class="size-4 accent-primary" />
@@ -260,6 +289,7 @@ async function remove(id: string) {
 
     <Modal v-model:open="showEdit" title="Edit timetable slot">
       <form class="space-y-3" @submit.prevent="update">
+        <Alert v-if="editFormError" variant="destructive">{{ editFormError }}</Alert>
         <div class="space-y-1.5"><Label>Subject</Label><Select v-model="editForm.subjectId" :options="subjectOptions" /></div>
         <p v-if="editIsActivity" class="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
           This is an activity — no teacher is assigned.
@@ -270,11 +300,23 @@ async function remove(id: string) {
         </p>
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-1.5"><Label>Day</Label><Select v-model="editForm.day" :options="dayOptions" /></div>
-          <div class="space-y-1.5"><Label>Period</Label><Input v-model="editForm.period" type="number" min="1" max="12" /></div>
+          <div class="space-y-1.5">
+            <Label>Period</Label>
+            <Input v-model="editForm.period" type="number" min="1" max="12" :class="editFieldErrors.period ? 'border-destructive' : ''" />
+            <p v-if="editFieldErrors.period" class="text-xs text-destructive">{{ editFieldErrors.period }}</p>
+          </div>
         </div>
         <div class="grid grid-cols-2 gap-3">
-          <div class="space-y-1.5"><Label>From</Label><Input v-model="editForm.startTime" type="time" required /></div>
-          <div class="space-y-1.5"><Label>To</Label><Input v-model="editForm.endTime" type="time" required /></div>
+          <div class="space-y-1.5">
+            <Label>From</Label>
+            <Input v-model="editForm.startTime" type="time" required :class="editFieldErrors.startTime ? 'border-destructive' : ''" />
+            <p v-if="editFieldErrors.startTime" class="text-xs text-destructive">{{ editFieldErrors.startTime }}</p>
+          </div>
+          <div class="space-y-1.5">
+            <Label>To</Label>
+            <Input v-model="editForm.endTime" type="time" required :class="editFieldErrors.endTime ? 'border-destructive' : ''" />
+            <p v-if="editFieldErrors.endTime" class="text-xs text-destructive">{{ editFieldErrors.endTime }}</p>
+          </div>
         </div>
         <div class="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" @click="showEdit = false">Cancel</Button>

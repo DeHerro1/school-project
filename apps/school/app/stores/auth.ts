@@ -17,8 +17,8 @@ interface AuthState {
   ready: boolean;
 }
 
-// Caches the profile only — the Supabase SDK (see useSupabase.ts) owns the
-// actual session/token lifecycle (persistence, auto-refresh) in its own
+// Caches the profile only — the Firebase Auth SDK (see useFirebase.ts) owns
+// the actual session/token lifecycle (persistence, auto-refresh) in its own
 // storage. This cache just avoids a network round trip to re-fetch the
 // profile on every page load; auth.client.ts reconciles it against the
 // SDK's real session on startup.

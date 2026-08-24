@@ -8,10 +8,11 @@ import {
   CalendarDays,
   ClipboardCheck,
   Receipt,
+  MessageCircle,
   Menu,
   LogOut,
 } from "lucide-vue-next";
-import { Avatar, DropdownMenu, DropdownMenuItem } from "@repo/ui";
+import { Avatar, DropdownMenu, DropdownMenuItem, ThemeToggle } from "@repo/ui";
 import { Role } from "@repo/shared";
 import { useAuthStore } from "~/stores/auth";
 
@@ -19,6 +20,7 @@ const auth = useAuthStore();
 const { logout } = useAuth();
 const route = useRoute();
 const mobileOpen = ref(false);
+const colorMode = useColorMode();
 
 interface NavItem {
   to: string;
@@ -30,7 +32,7 @@ interface NavItem {
 }
 
 const allNav: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: [Role.ADMIN, Role.TEACHER] },
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: [Role.ADMIN, Role.TEACHER] },
   // Students directory is admin-only; homeroom teachers reach their pupils via Attendance.
   { to: "/students", label: "Students", icon: GraduationCap, roles: [Role.ADMIN] },
   {
@@ -47,6 +49,7 @@ const allNav: NavItem[] = [
   { to: "/people", label: "Staff", icon: Users, roles: [Role.ADMIN] },
   { to: "/parents", label: "Parents", icon: Users, roles: [Role.ADMIN] },
   { to: "/fees", label: "Fees", icon: Receipt, roles: [Role.ADMIN] },
+  { to: "/messages", label: "Messages", icon: MessageCircle, roles: [Role.ADMIN, Role.TEACHER] },
 ];
 
 const nav = computed(() =>
@@ -59,7 +62,7 @@ const nav = computed(() =>
 );
 
 const isActive = (to: string) =>
-  to === "/" ? route.path === "/" : route.path.startsWith(to);
+  to === "/dashboard" ? route.path === "/dashboard" : route.path.startsWith(to);
 </script>
 
 <template>
@@ -71,7 +74,7 @@ const isActive = (to: string) =>
     >
       <div class="flex h-16 items-center gap-2 border-b px-6">
         <GraduationCap class="size-6 text-primary" />
-        <span class="text-lg font-bold">School Portal</span>
+        <span class="text-lg font-bold">EduCore</span>
       </div>
       <nav class="flex flex-col gap-1 p-3">
         <NuxtLink
@@ -109,6 +112,7 @@ const isActive = (to: string) =>
         </button>
         <div class="hidden lg:block" />
         <div class="flex items-center gap-2">
+          <ThemeToggle v-model="colorMode.preference" />
           <NotificationBell />
           <DropdownMenu>
             <template #trigger>
@@ -122,7 +126,7 @@ const isActive = (to: string) =>
               <p class="text-xs capitalize text-muted-foreground">{{ auth.role?.toLowerCase() }}</p>
             </div>
             <DropdownMenuItem class="mt-1 text-destructive" @select="logout">
-              <LogOut class="size-4" /> Sign out
+              <LogOut class="size-4" /> Log out
             </DropdownMenuItem>
           </DropdownMenu>
         </div>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { Building2, GraduationCap, Users, CheckCircle2 } from "lucide-vue-next";
-import { Card, CardHeader, CardTitle, CardContent, Badge, Button, EmptyState, Spinner } from "@repo/ui";
+import { Card, CardHeader, CardTitle, CardContent, Badge, Button, EmptyState, SkeletonStatGrid, SkeletonList } from "@repo/ui";
 import { SchoolStatus } from "@repo/shared";
 
 const api = useApi();
@@ -33,7 +33,12 @@ const recentSchools = computed(() => schools.value.slice(0, 5));
   <div>
     <PageHeader title="Dashboard" subtitle="Overview of every school on the platform" />
 
-    <div v-if="loading" class="flex justify-center py-20"><Spinner class="size-8 text-primary" /></div>
+    <div v-if="loading">
+      <SkeletonStatGrid :count="4" />
+      <Card class="mt-6">
+        <CardContent class="pt-5"><SkeletonList :rows="5" :avatar="false" /></CardContent>
+      </Card>
+    </div>
 
     <template v-else>
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

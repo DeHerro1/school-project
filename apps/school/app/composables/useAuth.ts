@@ -1,44 +1,75 @@
-import { Role } from "@repo/shared";
+import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
 import { useAuthStore, type AuthUser } from "~/stores/auth";
-import { useSupabase } from "./useSupabase";
+import { useFirebaseAuth } from "./useFirebase";
 
-interface AuthResponse {
+interface MeResponse {
   user: AuthUser;
-  accessToken: string;
-  refreshToken: string;
 }
 
-// The school portal is for staff only.
-const ALLOWED_ROLES: Role[] = [Role.ADMIN, Role.TEACHER];
-
+// Staff sign in with a username; parents sign in with their email — both
+// land here, and app/middleware/auth.global.ts routes them by role
+// afterwards (staff dashboard vs. the parent pages).
 export function useAuth() {
   const auth = useAuthStore();
   const api = useApi();
-  const supabase = useSupabase();
+  const firebaseAuth = useFirebaseAuth();
 
-  async function login(username: string, password: string) {
-    // Express resolves username -> email and proxies to Supabase Auth,
-    // returning its session tokens alongside the Prisma profile.
-    const res = await api<AuthResponse>("/auth/login", {
-      method: "POST",
-      body: { username, password },
-    });
-    if (!ALLOWED_ROLES.includes(res.user.role)) {
-      throw new Error(
-        "This is the staff portal. Parents should sign in at the Parent Portal (http://localhost:3002).",
-      );
+  async function login(usernameOrEmail: string, password: string) {
+    // Firebase Auth's password sign-in only accepts an email. Staff sign in
+    // with a username and need it resolved first; parents already type
+    // their email, so that round trip is skipped for them.
+    const email = usernameOrEmail.includes("@")
+      ? usernameOrEmail
+      : (
+          await api<{ email: string }>(
+            `/auth/resolve-username?username=${encodeURIComponent(usernameOrEmail)}`,
+          )
+        ).email;
+
+    try {
+      await signInWithEmailAndPassword(firebaseAuth, email, password);
+    } catch {
+      throw new Error("Invalid credentials");
     }
-    // Hand the session to the Supabase SDK so it owns persistence/auto-refresh from here on.
-    await supabase.auth.setSession({ access_token: res.accessToken, refresh_token: res.refreshToken });
-    auth.setUser(res.user);
-    return res.user;
+
+    return finishLogin("Invalid credentials");
+  }
+
+  /** Returns `null` if the user dismissed the Google popup — not an error worth surfacing. */
+  async function loginWithGoogle(): Promise<AuthUser | null> {
+    try {
+      await signInWithPopup(firebaseAuth, new GoogleAuthProvider());
+    } catch (e) {
+      const code = (e as { code?: string })?.code;
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+        return null;
+      }
+      throw new Error("Google sign-in failed");
+    }
+
+    return finishLogin("This Google account isn't registered here. Ask an admin to add you.");
+  }
+
+  // Shared by both sign-in methods: fetch the Firestore profile (also
+  // enforces the role check server-side, see server/api/auth/me.get.ts), or
+  // roll back the Firebase Auth session.
+  async function finishLogin(notRegisteredMessage: string): Promise<AuthUser> {
+    try {
+      const res = await api<MeResponse>("/auth/me");
+      auth.setUser(res.user);
+      return res.user;
+    } catch {
+      await signOut(firebaseAuth);
+      auth.clear();
+      throw new Error(notRegisteredMessage);
+    }
   }
 
   async function logout() {
-    await supabase.auth.signOut();
+    await signOut(firebaseAuth);
     auth.clear();
-    await navigateTo("/login");
+    await navigateTo("/");
   }
 
-  return { login, logout };
+  return { login, loginWithGoogle, logout };
 }

@@ -3,8 +3,8 @@ import { ref, onMounted, computed } from "vue";
 import { Plus, CreditCard, Search } from "lucide-vue-next";
 import { InvoiceStatus, Term, TERM_OPTIONS } from "@repo/shared";
 import {
-  Card, Button, Input, Label, Select, Modal, Badge, Spinner,
-  Table, TableHeader, TableBody, TableRow, TableHead, TableCell, useToast,
+  Card, Button, Input, Label, Select, Modal, Badge, SkeletonTable,
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell, useToast, Alert,
 } from "@repo/ui";
 
 const api = useApi();
@@ -21,10 +21,14 @@ const termFilter = ref<string>("ALL");
 const showAdd = ref(false);
 const saving = ref(false);
 const form = ref({ studentId: "", term: Term.FIRST as string, amount: 0, dueDate: "" });
+const formError = ref("");
+const fieldErrors = ref<Record<string, string>>({});
 
 const showPay = ref(false);
 const payInvoice = ref<any>(null);
 const payForm = ref({ amount: 0, method: "cash" });
+const payFormError = ref("");
+const payFieldErrors = ref<Record<string, string>>({});
 
 async function load() {
   loading.value = true;
@@ -93,6 +97,8 @@ const filtered = computed(() =>
 
 async function create() {
   saving.value = true;
+  formError.value = "";
+  fieldErrors.value = {};
   try {
     await api("/invoices", {
       method: "POST",
@@ -103,7 +109,9 @@ async function create() {
     form.value = { studentId: "", term: Term.FIRST, amount: 0, dueDate: "" };
     await load();
   } catch (e) {
-    toast({ title: "Failed", description: apiError(e), variant: "destructive" });
+    const fields = apiFieldErrors(e);
+    if (fields) fieldErrors.value = fields;
+    else formError.value = apiError(e);
   } finally {
     saving.value = false;
   }
@@ -112,9 +120,13 @@ async function create() {
 function openPay(inv: any) {
   payInvoice.value = inv;
   payForm.value = { amount: inv.amount - paidOf(inv), method: "cash" };
+  payFormError.value = "";
+  payFieldErrors.value = {};
   showPay.value = true;
 }
 async function recordPayment() {
+  payFormError.value = "";
+  payFieldErrors.value = {};
   try {
     await api("/invoices/payments", {
       method: "POST",
@@ -124,7 +136,9 @@ async function recordPayment() {
     showPay.value = false;
     await load();
   } catch (e) {
-    toast({ title: "Failed", description: apiError(e), variant: "destructive" });
+    const fields = apiFieldErrors(e);
+    if (fields) payFieldErrors.value = fields;
+    else payFormError.value = apiError(e);
   }
 }
 </script>
@@ -132,7 +146,7 @@ async function recordPayment() {
 <template>
   <div>
     <PageHeader title="Fees & Invoices">
-      <template #actions><Button @click="showAdd = true"><Plus class="size-4" /> New invoice</Button></template>
+      <template #actions><Button @click="formError = ''; fieldErrors = {}; showAdd = true"><Plus class="size-4" /> New invoice</Button></template>
     </PageHeader>
 
     <div class="mb-4 space-y-3 sm:flex sm:flex-wrap sm:items-center sm:gap-3 sm:space-y-0">
@@ -147,7 +161,7 @@ async function recordPayment() {
       </div>
     </div>
 
-    <div v-if="loading" class="flex justify-center py-16"><Spinner class="size-7 text-primary" /></div>
+    <SkeletonTable v-if="loading" :rows="6" :cols="7" />
 
     <template v-else>
       <!-- Mobile: stacked cards -->
@@ -204,7 +218,7 @@ async function recordPayment() {
                 </Button>
               </TableCell>
             </TableRow>
-            <TableRow v-if="!filtered.length"><TableCell class="py-10 text-center text-muted-foreground">{{ invoices.length ? "No invoices match your filters." : "No invoices yet." }}</TableCell></TableRow>
+            <TableRow v-if="!filtered.length"><TableCell colspan="7" class="py-10 text-center text-muted-foreground">{{ invoices.length ? "No invoices match your filters." : "No invoices yet." }}</TableCell></TableRow>
           </TableBody>
         </Table>
       </Card>
@@ -212,11 +226,20 @@ async function recordPayment() {
 
     <Modal v-model:open="showAdd" title="New invoice">
       <form class="space-y-3" @submit.prevent="create">
+        <Alert v-if="formError" variant="destructive">{{ formError }}</Alert>
         <div class="space-y-1.5"><Label>Student</Label><Select v-model="form.studentId" :options="studentOptions" placeholder="Select student" /></div>
         <div class="space-y-1.5"><Label>Term</Label><Select v-model="form.term" :options="TERM_OPTIONS" placeholder="Select term" /></div>
         <div class="grid grid-cols-2 gap-3">
-          <div class="space-y-1.5"><Label>Amount</Label><Input v-model="form.amount" type="number" required /></div>
-          <div class="space-y-1.5"><Label>Due date</Label><Input v-model="form.dueDate" type="date" required /></div>
+          <div class="space-y-1.5">
+            <Label>Amount</Label>
+            <Input v-model="form.amount" type="number" required :class="fieldErrors.amount ? 'border-destructive' : ''" />
+            <p v-if="fieldErrors.amount" class="text-xs text-destructive">{{ fieldErrors.amount }}</p>
+          </div>
+          <div class="space-y-1.5">
+            <Label>Due date</Label>
+            <Input v-model="form.dueDate" type="date" required :class="fieldErrors.dueDate ? 'border-destructive' : ''" />
+            <p v-if="fieldErrors.dueDate" class="text-xs text-destructive">{{ fieldErrors.dueDate }}</p>
+          </div>
         </div>
         <div class="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" @click="showAdd = false">Cancel</Button>
@@ -227,8 +250,17 @@ async function recordPayment() {
 
     <Modal v-model:open="showPay" title="Record payment">
       <form class="space-y-3" @submit.prevent="recordPayment">
-        <div class="space-y-1.5"><Label>Amount</Label><Input v-model="payForm.amount" type="number" /></div>
-        <div class="space-y-1.5"><Label>Method</Label><Input v-model="payForm.method" /></div>
+        <Alert v-if="payFormError" variant="destructive">{{ payFormError }}</Alert>
+        <div class="space-y-1.5">
+          <Label>Amount</Label>
+          <Input v-model="payForm.amount" type="number" :class="payFieldErrors.amount ? 'border-destructive' : ''" />
+          <p v-if="payFieldErrors.amount" class="text-xs text-destructive">{{ payFieldErrors.amount }}</p>
+        </div>
+        <div class="space-y-1.5">
+          <Label>Method</Label>
+          <Input v-model="payForm.method" :class="payFieldErrors.method ? 'border-destructive' : ''" />
+          <p v-if="payFieldErrors.method" class="text-xs text-destructive">{{ payFieldErrors.method }}</p>
+        </div>
         <div class="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" @click="showPay = false">Cancel</Button>
           <Button type="submit">Save</Button>

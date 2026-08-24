@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick, watch } from "vue";
 import { Send } from "lucide-vue-next";
-import { Card, Button, Input, Avatar, Badge, Spinner, EmptyState } from "@repo/ui";
+import { Card, Button, Input, Avatar, Badge, Skeleton, EmptyState } from "@repo/ui";
 import { SocketEvents } from "@repo/shared";
 import { useAuthStore } from "~/stores/auth";
 
@@ -63,7 +63,18 @@ function scrollDown() {
   <div>
     <PageHeader title="Messages" subtitle="Chat with parents and staff" />
 
-    <div v-if="loading" class="flex justify-center py-16"><Spinner class="size-7 text-primary" /></div>
+    <Card v-if="loading" class="grid h-[70vh] grid-cols-1 overflow-hidden md:grid-cols-[280px_1fr]">
+      <div class="space-y-1 border-r p-3">
+        <div v-for="i in 6" :key="i" class="flex items-center gap-3 p-2">
+          <Skeleton class="size-9 shrink-0 rounded-full" />
+          <div class="min-w-0 flex-1">
+            <Skeleton class="h-3.5 w-24" />
+            <Skeleton class="mt-1.5 h-3 w-12" />
+          </div>
+        </div>
+      </div>
+      <div class="hidden md:block" />
+    </Card>
     <Card v-else class="grid h-[70vh] grid-cols-1 overflow-hidden md:grid-cols-[280px_1fr]">
       <!-- Contacts -->
       <div class="border-r" :class="active ? 'hidden md:block' : ''">

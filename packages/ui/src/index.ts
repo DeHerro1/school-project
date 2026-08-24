@@ -30,6 +30,13 @@ export {
 } from "./components/table-parts";
 export { default as Toaster } from "./components/Toaster.vue";
 export { default as Spinner } from "./components/Spinner.vue";
+export { default as Skeleton } from "./components/Skeleton.vue";
+export { default as SkeletonTable } from "./components/SkeletonTable.vue";
+export { default as SkeletonStatGrid } from "./components/SkeletonStatGrid.vue";
+export { default as SkeletonList } from "./components/SkeletonList.vue";
+export { default as SkeletonLines } from "./components/SkeletonLines.vue";
+export { default as ThemeToggle } from "./components/ThemeToggle.vue";
+export type { ThemePreference } from "./components/ThemeToggle.vue";
 export { default as EmptyState } from "./components/EmptyState.vue";
 export { default as TimetableCalendar } from "./components/TimetableCalendar.vue";
 export { useToast } from "./components/toast";

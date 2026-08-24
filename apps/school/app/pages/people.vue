@@ -2,8 +2,8 @@
 import { ref, onMounted, computed } from "vue";
 import { UserPlus, Trash2 } from "lucide-vue-next";
 import {
-  Card, Button, Input, Label, Select, Modal, Tabs, Avatar, Badge, Spinner,
-  Table, TableHeader, TableBody, TableRow, TableHead, TableCell, useToast,
+  Card, Button, Input, Label, Select, Modal, Tabs, Avatar, Badge, SkeletonTable,
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell, useToast, Alert,
 } from "@repo/ui";
 import { Role } from "@repo/shared";
 
@@ -19,8 +19,9 @@ const tabs = [
 
 const showAdd = ref(false);
 const saving = ref(false);
-const form = ref({ name: "", email: "", username: "", password: "", phone: "", role: Role.TEACHER as string });
-const isStaffRole = true;
+const form = ref({ name: "", email: "", password: "", phone: "", role: Role.TEACHER as string });
+const formError = ref("");
+const fieldErrors = ref<Record<string, string>>({});
 const roleOptions = [
   { value: Role.TEACHER, label: "Teacher" },
   { value: Role.ADMIN, label: "Admin" },
@@ -52,13 +53,14 @@ const rowsForTab = (v: string) => v === "TEACHER" ? teachers.value : admins.valu
 
 async function create() {
   saving.value = true;
+  formError.value = "";
+  fieldErrors.value = {};
   try {
     const { user } = await api<{ user: any }>("/users", {
       method: "POST",
       body: {
         ...form.value,
         phone: form.value.phone || undefined,
-        username: isStaffRole.value ? form.value.username : undefined,
       },
     });
     // Upload the profile photo once the account exists.
@@ -69,12 +71,18 @@ async function create() {
     }
     toast({ title: "Account created", variant: "success" });
     showAdd.value = false;
-    form.value = { name: "", email: "", username: "", password: "", phone: "", role: Role.TEACHER };
+    form.value = { name: "", email: "", password: "", phone: "", role: Role.TEACHER };
     photoFile.value = null;
     photoPreview.value = "";
     await load();
   } catch (e) {
-    toast({ title: "Failed", description: apiError(e), variant: "destructive" });
+    // Validation failures (wrong password length, bad email, etc.) point at
+    // one specific field — show them right under that field instead of a
+    // generic toast. Anything else (duplicate email, network error, ...)
+    // isn't tied to one input, so that still gets a form-level message.
+    const fields = apiFieldErrors(e);
+    if (fields) fieldErrors.value = fields;
+    else formError.value = apiError(e);
   } finally {
     saving.value = false;
   }
@@ -88,10 +96,10 @@ async function remove(id: string) {
 <template>
   <div>
     <PageHeader title="Staff" subtitle="Create and manage staff accounts">
-      <template #actions><Button @click="showAdd = true"><UserPlus class="size-4" /> New account</Button></template>
+      <template #actions><Button @click="formError = ''; fieldErrors = {}; showAdd = true"><UserPlus class="size-4" /> New account</Button></template>
     </PageHeader>
 
-    <div v-if="loading" class="flex justify-center py-16"><Spinner class="size-7 text-primary" /></div>
+    <SkeletonTable v-if="loading" :rows="5" :cols="4" />
     <Tabs v-else v-model="tab" :tabs="tabs">
       <template v-for="t in tabs" :key="t.value" #[t.value]>
         <!-- Mobile: stacked cards -->
@@ -153,6 +161,7 @@ async function remove(id: string) {
 
     <Modal v-model:open="showAdd" title="New account">
       <form class="space-y-3" @submit.prevent="create">
+        <Alert v-if="formError" variant="destructive">{{ formError }}</Alert>
         <div class="flex items-center gap-3">
           <Avatar :name="form.name" :src="photoPreview" class="size-16 text-lg" />
           <label class="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-muted">
@@ -162,16 +171,29 @@ async function remove(id: string) {
           </label>
         </div>
         <div class="space-y-1.5"><Label>Role</Label><Select v-model="form.role" :options="roleOptions" /></div>
-        <div class="space-y-1.5"><Label>Full name</Label><Input v-model="form.name" required /></div>
-        <div class="space-y-1.5"><Label>Email</Label><Input v-model="form.email" type="email" required /></div>
-        <div v-if="isStaffRole" class="space-y-1.5">
-          <Label>Username</Label>
-          <Input v-model="form.username" placeholder="Used to sign in — e.g. sarah" autocapitalize="none" :required="isStaffRole" />
-          <p class="text-xs text-muted-foreground">Staff sign in with this username. Letters, numbers, and . _ - only.</p>
+        <div class="space-y-1.5">
+          <Label>Full name</Label>
+          <Input v-model="form.name" required :class="fieldErrors.name ? 'border-destructive' : ''" />
+          <p v-if="fieldErrors.name" class="text-xs text-destructive">{{ fieldErrors.name }}</p>
+        </div>
+        <div class="space-y-1.5">
+          <Label>Email</Label>
+          <Input v-model="form.email" type="email" required :class="fieldErrors.email ? 'border-destructive' : ''" />
+          <p v-if="fieldErrors.email" class="text-xs text-destructive">{{ fieldErrors.email }}</p>
+          <p v-else class="text-xs text-muted-foreground">They'll sign in with this email and the password below.</p>
         </div>
         <div class="grid grid-cols-2 gap-3">
-          <div class="space-y-1.5"><Label>Password</Label><Input v-model="form.password" type="text" required /></div>
-          <div class="space-y-1.5"><Label>Phone</Label><Input v-model="form.phone" /></div>
+          <div class="space-y-1.5">
+            <Label>Password</Label>
+            <Input v-model="form.password" type="text" required :class="fieldErrors.password ? 'border-destructive' : ''" />
+            <p v-if="fieldErrors.password" class="text-xs text-destructive">{{ fieldErrors.password }}</p>
+            <p v-else class="text-xs text-muted-foreground">At least 6 characters.</p>
+          </div>
+          <div class="space-y-1.5">
+            <Label>Phone</Label>
+            <Input v-model="form.phone" :class="fieldErrors.phone ? 'border-destructive' : ''" />
+            <p v-if="fieldErrors.phone" class="text-xs text-destructive">{{ fieldErrors.phone }}</p>
+          </div>
         </div>
         <div class="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" @click="showAdd = false">Cancel</Button>

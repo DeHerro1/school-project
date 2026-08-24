@@ -91,9 +91,20 @@
   * {
     border-color: hsl(var(--border));
   }
+  html {
+    overflow-x: hidden;
+  }
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
     font-feature-settings: "rlig" 1, "calt" 1;
+    overflow-x: hidden;
+  }
+}
+
+/* Loading-skeleton shimmer sweep — see components/Skeleton.vue */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
   }
 }

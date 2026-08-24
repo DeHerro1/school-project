@@ -7,7 +7,6 @@
     "dev": "pnpm -r --parallel --filter=./apps/* dev",
     "dev:api": "pnpm --filter api dev",
     "dev:school": "pnpm --filter school dev",
-    "dev:parent": "pnpm --filter parent dev",
     "dev:schools-backoffice": "pnpm --filter schools-backoffice dev",
     "build": "pnpm -r build",
     "db:up": "supabase start",
@@ -15,13 +14,16 @@
     "db:migrate": "pnpm --filter api prisma migrate dev",
     "db:seed": "pnpm --filter api prisma db seed",
     "db:studio": "pnpm --filter api prisma studio",
-    "db:reset": "pnpm --filter api prisma migrate reset"
+    "db:reset": "pnpm --filter api prisma migrate reset",
+    "firebase:emulators": "firebase emulators:start --only auth --import=./.firebase-data --export-on-exit",
+    "firebase:seed": "pnpm --filter school run seed:firebase && pnpm --filter schools-backoffice run seed:firebase"
   },
   "engines": {
     "node": ">=20"
   },
   "packageManager": "pnpm@10.27.0",
   "devDependencies": {
+    "firebase-tools": "^13.29.0",
     "supabase": "^2.114.0"
   },
   "pnpm": {

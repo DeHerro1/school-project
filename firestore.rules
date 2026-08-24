@@ -1,0 +1,15 @@
+rules_version = '2';
+
+// All reads/writes for the school (teachers & headmaster) app go through the
+// Nuxt server (server/api/**), which uses the Firebase Admin SDK — Admin SDK
+// calls always bypass these rules. Client apps never talk to Firestore
+// directly here, so the rules stay closed. If a later app (parent portal,
+// live notification listeners, ...) needs direct client reads, open the
+// specific collection with a scoped `allow read` instead of widening this.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

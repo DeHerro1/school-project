@@ -8,6 +8,14 @@ dist/
 *.log
 logs/
 
+# Firebase (school app)
+.firebase/
+.firebase-data/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+apps/school/service-account.json
+
 # Prisma
 apps/api/prisma/*.db
 

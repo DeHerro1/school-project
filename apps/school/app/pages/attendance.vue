@@ -9,10 +9,12 @@ import {
   Label,
   Avatar,
   Badge,
-  Spinner,
+  Skeleton,
+  SkeletonLines,
   EmptyState,
   Modal,
   useToast,
+  Alert,
 } from "@repo/ui";
 import { useAuthStore } from "~/stores/auth";
 
@@ -175,6 +177,8 @@ const emptyForm = () => ({
   address: "",
 });
 const form = ref(emptyForm());
+const formError = ref("");
+const fieldErrors = ref<Record<string, string>>({});
 
 const photoFile = ref<File | null>(null);
 const photoPreview = ref("");
@@ -186,6 +190,8 @@ function onPhotoPick(e: Event) {
 
 async function createStudent() {
   saving.value = true;
+  formError.value = "";
+  fieldErrors.value = {};
   try {
     // Drop empty optional strings so they don't fail min-length validation.
     const payload = Object.fromEntries(
@@ -206,7 +212,9 @@ async function createStudent() {
     photoPreview.value = "";
     await loadRoster();
   } catch (e) {
-    toast({ title: "Could not add student", description: apiError(e), variant: "destructive" });
+    const fields = apiFieldErrors(e);
+    if (fields) fieldErrors.value = fields;
+    else formError.value = apiError(e);
   } finally {
     saving.value = false;
   }
@@ -222,7 +230,7 @@ async function createStudent() {
         : 'Attendance overview by class — present and absent counts for the day.'"
     >
       <template v-if="canMark" #actions>
-        <Button @click="showAdd = true"><UserPlus class="size-4" /> Add student</Button>
+        <Button @click="formError = ''; fieldErrors = {}; showAdd = true"><UserPlus class="size-4" /> Add student</Button>
       </template>
     </PageHeader>
 
@@ -263,7 +271,19 @@ async function createStudent() {
 
     <!-- Admin / head overview: one card per class with present & absent counts. -->
     <template v-if="!canMark">
-      <div v-if="loading" class="flex justify-center py-16"><Spinner class="size-7 text-primary" /></div>
+      <div v-if="loading" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Card v-for="i in 6" :key="i" class="p-4">
+          <div class="flex items-center justify-between gap-2">
+            <Skeleton class="h-4 w-20" />
+            <Skeleton class="h-5 w-12 rounded-full" />
+          </div>
+          <div class="mt-4 grid grid-cols-3 gap-2">
+            <Skeleton class="h-12 rounded-md" />
+            <Skeleton class="h-12 rounded-md" />
+            <Skeleton class="h-12 rounded-md" />
+          </div>
+        </Card>
+      </div>
       <EmptyState v-else-if="!summary.length" title="No classes yet">
         <template #icon><Check /></template>
       </EmptyState>
@@ -292,7 +312,15 @@ async function createStudent() {
     </template>
 
     <template v-else>
-    <div v-if="loading" class="flex justify-center py-16"><Spinner class="size-7 text-primary" /></div>
+    <Card v-if="loading" class="divide-y">
+      <div v-for="i in 6" :key="i" class="flex items-center gap-3 p-4">
+        <Skeleton class="size-10 shrink-0 rounded-full" />
+        <div class="min-w-0 flex-1">
+          <Skeleton class="h-4 w-32" />
+          <Skeleton class="mt-1.5 h-3 w-20" />
+        </div>
+      </div>
+    </Card>
     <EmptyState v-else-if="!rows.length" title="No students in this class">
       <template #icon><Check /></template>
     </EmptyState>
@@ -370,6 +398,7 @@ async function createStudent() {
     <!-- Add a student to the current class. -->
     <Modal v-model:open="showAdd" title="Add student" :description="currentClassName ? `Enrolling into ${currentClassName}.` : undefined">
       <form class="space-y-3" @submit.prevent="createStudent">
+        <Alert v-if="formError" variant="destructive">{{ formError }}</Alert>
         <div class="flex items-center gap-4">
           <Avatar :name="`${form.firstName} ${form.lastName}`" :src="photoPreview" class="size-16 text-lg" />
           <label class="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-muted">
@@ -379,10 +408,22 @@ async function createStudent() {
           </label>
         </div>
         <div class="grid grid-cols-2 gap-3">
-          <div class="space-y-1.5"><Label>First name</Label><Input v-model="form.firstName" required /></div>
-          <div class="space-y-1.5"><Label>Last name</Label><Input v-model="form.lastName" required /></div>
+          <div class="space-y-1.5">
+            <Label>First name</Label>
+            <Input v-model="form.firstName" required :class="fieldErrors.firstName ? 'border-destructive' : ''" />
+            <p v-if="fieldErrors.firstName" class="text-xs text-destructive">{{ fieldErrors.firstName }}</p>
+          </div>
+          <div class="space-y-1.5">
+            <Label>Last name</Label>
+            <Input v-model="form.lastName" required :class="fieldErrors.lastName ? 'border-destructive' : ''" />
+            <p v-if="fieldErrors.lastName" class="text-xs text-destructive">{{ fieldErrors.lastName }}</p>
+          </div>
         </div>
-        <div class="space-y-1.5"><Label>Date of birth</Label><Input v-model="form.dob" type="date" required /></div>
+        <div class="space-y-1.5">
+          <Label>Date of birth</Label>
+          <Input v-model="form.dob" type="date" required :class="fieldErrors.dob ? 'border-destructive' : ''" />
+          <p v-if="fieldErrors.dob" class="text-xs text-destructive">{{ fieldErrors.dob }}</p>
+        </div>
         <div class="space-y-1.5"><Label>Class</Label><Input :model-value="currentClassName" disabled /></div>
         <div class="border-t pt-3">
           <p class="mb-2 text-sm font-semibold">Parent / guardian</p>
@@ -421,8 +462,15 @@ async function createStudent() {
       :title="detail ? `${detail.firstName} ${detail.lastName}` : 'Student details'"
       class="max-w-xl"
     >
-      <div v-if="detailLoading" class="flex justify-center py-10">
-        <Spinner class="size-6 text-primary" />
+      <div v-if="detailLoading" class="space-y-6">
+        <div class="flex items-center gap-3">
+          <Skeleton class="size-14 shrink-0 rounded-full" />
+          <div class="space-y-1.5">
+            <Skeleton class="h-4 w-36" />
+            <Skeleton class="h-3 w-24" />
+          </div>
+        </div>
+        <SkeletonLines :lines="3" />
       </div>
       <div v-else-if="detail" class="space-y-6">
         <div class="flex items-center gap-3">

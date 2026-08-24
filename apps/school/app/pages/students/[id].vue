@@ -27,7 +27,8 @@ import {
   Tabs,
   Select,
   Modal,
-  Spinner,
+  Skeleton,
+  SkeletonLines,
   EmptyState,
   Table,
   TableHeader,
@@ -36,6 +37,7 @@ import {
   TableHead,
   TableCell,
   useToast,
+  Alert,
 } from "@repo/ui";
 import { TERM_OPTIONS } from "@repo/shared";
 import { useAuthStore } from "~/stores/auth";
@@ -182,12 +184,14 @@ const photoModal = ref(false);
 const photoFile = ref<File | null>(null);
 const caption = ref("");
 const sharing = ref(false);
+const photoFormError = ref("");
 function onPhotoPick(e: Event) {
   photoFile.value = (e.target as HTMLInputElement).files?.[0] ?? null;
 }
 async function sharePhoto(target: "portal" | "whatsapp") {
   if (!photoFile.value) return;
   sharing.value = true;
+  photoFormError.value = "";
   try {
     const fd = new FormData();
     fd.append("file", photoFile.value);
@@ -214,7 +218,7 @@ async function sharePhoto(target: "portal" | "whatsapp") {
     const m = await api<{ media: any[] }>(`/media?studentId=${studentId}`);
     media.value = m.media;
   } catch (e) {
-    toast({ title: "Failed to share", description: apiError(e), variant: "destructive" });
+    photoFormError.value = apiError(e);
   } finally {
     sharing.value = false;
   }
@@ -267,6 +271,12 @@ function emptyReportForm() {
   };
 }
 const reportForm = ref(emptyReportForm());
+const reportFormError = ref("");
+const reportFieldErrors = ref<Record<string, string>>({});
+// Flat fields this form renders inline error hints for — anything else
+// (e.g. a "marks.0.score" issue) falls back to the banner above instead of
+// going unnoticed.
+const REPORT_FIELD_KEYS = ["term", "year", "positionInClass", "progress", "interest", "strength", "howParentsCanHelp"];
 
 // A promotion is only captured on the end-of-year (Third Term) report.
 const isThirdTerm = computed(() => reportForm.value.term === "Third Term");
@@ -316,6 +326,8 @@ function addMarkRow() {
 }
 async function createReport() {
   savingReport.value = true;
+  reportFormError.value = "";
+  reportFieldErrors.value = {};
   try {
     await api("/reports", {
       method: "POST",
@@ -347,7 +359,10 @@ async function createReport() {
     const r = await api<{ reports: any[] }>(`/reports?studentId=${studentId}`);
     reports.value = r.reports;
   } catch (e) {
-    toast({ title: "Failed", description: apiError(e), variant: "destructive" });
+    const fields = apiFieldErrors(e);
+    const matched = fields && Object.keys(fields).some((k) => REPORT_FIELD_KEYS.includes(k));
+    if (matched) reportFieldErrors.value = fields!;
+    else reportFormError.value = apiError(e);
   } finally {
     savingReport.value = false;
   }
@@ -367,8 +382,12 @@ async function uploadReportPdf(reportId: string, e: Event) {
 const progressModal = ref(false);
 const savingProgress = ref(false);
 const pForm = ref({ term: "First Term", strengths: "", talents: "", needs: "", howParentsCanHelp: "" });
+const progressFormError = ref("");
+const progressFieldErrors = ref<Record<string, string>>({});
 async function createProgress() {
   savingProgress.value = true;
+  progressFormError.value = "";
+  progressFieldErrors.value = {};
   try {
     await api("/progress", { method: "POST", body: { studentId, ...pForm.value } });
     toast({ title: "Progress update sent", description: "Parents have been notified.", variant: "success" });
@@ -377,7 +396,9 @@ async function createProgress() {
     const p = await api<{ reports: any[] }>(`/progress?studentId=${studentId}`);
     progress.value = p.reports;
   } catch (e) {
-    toast({ title: "Failed", description: apiError(e), variant: "destructive" });
+    const fields = apiFieldErrors(e);
+    if (fields) progressFieldErrors.value = fields;
+    else progressFormError.value = apiError(e);
   } finally {
     savingProgress.value = false;
   }
@@ -386,8 +407,10 @@ async function createProgress() {
 // ---------- Guardians (admin) ----------
 const linkParentId = ref("");
 const relation = ref("Parent");
+const linkGuardianError = ref("");
 async function linkGuardian() {
   if (!linkParentId.value) return;
+  linkGuardianError.value = "";
   try {
     await api("/students/guardianships", {
       method: "POST",
@@ -397,7 +420,7 @@ async function linkGuardian() {
     linkParentId.value = "";
     await loadAll();
   } catch (e) {
-    toast({ title: "Failed", description: apiError(e), variant: "destructive" });
+    linkGuardianError.value = apiError(e);
   }
 }
 async function unlinkGuardian(id: string) {
@@ -413,7 +436,16 @@ const parentOptions = computed(() =>
 
 <template>
   <div>
-    <div v-if="loading" class="flex justify-center py-20"><Spinner class="size-8 text-primary" /></div>
+    <div v-if="loading">
+      <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center">
+        <Skeleton class="size-20 rounded-full" />
+        <div class="flex-1 space-y-2">
+          <Skeleton class="h-6 w-48" />
+          <Skeleton class="h-3.5 w-32" />
+        </div>
+      </div>
+      <SkeletonLines :lines="6" />
+    </div>
     <template v-else-if="student">
       <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center">
         <div class="relative">
@@ -495,6 +527,7 @@ const parentOptions = computed(() =>
                     <Input v-model="relation" placeholder="Relation (e.g. Father)" />
                     <Button :disabled="!linkParentId" @click="linkGuardian"><Link2 class="size-4" /> Link</Button>
                   </div>
+                  <p v-if="linkGuardianError" class="text-xs text-destructive">{{ linkGuardianError }}</p>
                 </div>
               </CardContent>
             </Card>
@@ -504,7 +537,7 @@ const parentOptions = computed(() =>
         <!-- PHOTOS -->
         <template #photos>
           <div class="mb-4 flex justify-end">
-            <Button @click="photoModal = true"><Camera class="size-4" /> Share a photo</Button>
+            <Button @click="photoFormError = ''; photoModal = true"><Camera class="size-4" /> Share a photo</Button>
           </div>
           <EmptyState v-if="!media.length" title="No photos shared yet" description="Capture a moment and share it with the parents.">
             <template #icon><Camera /></template>
@@ -525,7 +558,7 @@ const parentOptions = computed(() =>
         <!-- REPORTS -->
         <template #reports>
           <div class="mb-4 flex justify-end">
-            <Button @click="reportModal = true"><FileText class="size-4" /> New term report</Button>
+            <Button @click="reportFormError = ''; reportFieldErrors = {}; reportModal = true"><FileText class="size-4" /> New term report</Button>
           </div>
           <EmptyState v-if="!reports.length" title="No reports yet">
             <template #icon><FileText /></template>
@@ -607,7 +640,7 @@ const parentOptions = computed(() =>
         <!-- PROGRESS -->
         <template #progress>
           <div class="mb-4 flex justify-end">
-            <Button @click="progressModal = true"><Sparkles class="size-4" /> New progress update</Button>
+            <Button @click="progressFormError = ''; progressFieldErrors = {}; progressModal = true"><Sparkles class="size-4" /> New progress update</Button>
           </div>
           <EmptyState v-if="!progress.length" title="No progress updates yet" description="Share where the child excels and how parents can help.">
             <template #icon><Sparkles /></template>
@@ -643,6 +676,7 @@ const parentOptions = computed(() =>
     <!-- Share photo modal -->
     <Modal v-model:open="photoModal" title="Share a photo" description="Send a photo of this student to their parents.">
       <div class="space-y-3">
+        <Alert v-if="photoFormError" variant="destructive">{{ photoFormError }}</Alert>
         <input type="file" accept="image/*" @change="onPhotoPick" />
         <Textarea v-model="caption" placeholder="Add a caption (optional)…" />
         <div>
@@ -663,9 +697,18 @@ const parentOptions = computed(() =>
     <!-- Term report modal -->
     <Modal v-model:open="reportModal" title="New term report" description="Publish a report; parents are notified." class="max-w-xl">
       <div class="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
+        <Alert v-if="reportFormError" variant="destructive">{{ reportFormError }}</Alert>
         <div class="grid grid-cols-2 gap-3">
-          <div class="space-y-1.5"><Label>Term</Label><Select v-model="reportForm.term" :options="TERM_OPTIONS" placeholder="Select term" /></div>
-          <div class="space-y-1.5"><Label>Year</Label><Input v-model="reportForm.year" type="number" /></div>
+          <div class="space-y-1.5">
+            <Label>Term</Label>
+            <Select v-model="reportForm.term" :options="TERM_OPTIONS" placeholder="Select term" />
+            <p v-if="reportFieldErrors.term" class="text-xs text-destructive">{{ reportFieldErrors.term }}</p>
+          </div>
+          <div class="space-y-1.5">
+            <Label>Year</Label>
+            <Input v-model="reportForm.year" type="number" :class="reportFieldErrors.year ? 'border-destructive' : ''" />
+            <p v-if="reportFieldErrors.year" class="text-xs text-destructive">{{ reportFieldErrors.year }}</p>
+          </div>
         </div>
         <div class="space-y-1.5">
           <Label>Position in class</Label>
@@ -711,11 +754,32 @@ const parentOptions = computed(() =>
     <!-- Progress modal -->
     <Modal v-model:open="progressModal" title="Progress & talent update" class="max-w-xl">
       <div class="space-y-3">
-        <div class="space-y-1.5"><Label>Term</Label><Select v-model="pForm.term" :options="TERM_OPTIONS" placeholder="Select term" /></div>
-        <div class="space-y-1.5"><Label>Strengths</Label><Textarea v-model="pForm.strengths" /></div>
-        <div class="space-y-1.5"><Label>Talents — where the child excels</Label><Textarea v-model="pForm.talents" /></div>
-        <div class="space-y-1.5"><Label>What's needed</Label><Textarea v-model="pForm.needs" /></div>
-        <div class="space-y-1.5"><Label>How parents can help</Label><Textarea v-model="pForm.howParentsCanHelp" /></div>
+        <Alert v-if="progressFormError" variant="destructive">{{ progressFormError }}</Alert>
+        <div class="space-y-1.5">
+          <Label>Term</Label>
+          <Select v-model="pForm.term" :options="TERM_OPTIONS" placeholder="Select term" />
+          <p v-if="progressFieldErrors.term" class="text-xs text-destructive">{{ progressFieldErrors.term }}</p>
+        </div>
+        <div class="space-y-1.5">
+          <Label>Strengths</Label>
+          <Textarea v-model="pForm.strengths" :class="progressFieldErrors.strengths ? 'border-destructive' : ''" />
+          <p v-if="progressFieldErrors.strengths" class="text-xs text-destructive">{{ progressFieldErrors.strengths }}</p>
+        </div>
+        <div class="space-y-1.5">
+          <Label>Talents — where the child excels</Label>
+          <Textarea v-model="pForm.talents" :class="progressFieldErrors.talents ? 'border-destructive' : ''" />
+          <p v-if="progressFieldErrors.talents" class="text-xs text-destructive">{{ progressFieldErrors.talents }}</p>
+        </div>
+        <div class="space-y-1.5">
+          <Label>What's needed</Label>
+          <Textarea v-model="pForm.needs" :class="progressFieldErrors.needs ? 'border-destructive' : ''" />
+          <p v-if="progressFieldErrors.needs" class="text-xs text-destructive">{{ progressFieldErrors.needs }}</p>
+        </div>
+        <div class="space-y-1.5">
+          <Label>How parents can help</Label>
+          <Textarea v-model="pForm.howParentsCanHelp" :class="progressFieldErrors.howParentsCanHelp ? 'border-destructive' : ''" />
+          <p v-if="progressFieldErrors.howParentsCanHelp" class="text-xs text-destructive">{{ progressFieldErrors.howParentsCanHelp }}</p>
+        </div>
         <div class="flex justify-end gap-2 pt-2">
           <Button variant="outline" @click="progressModal = false">Cancel</Button>
           <Button :loading="savingProgress" @click="createProgress">Send to parents</Button>

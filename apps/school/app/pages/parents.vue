@@ -2,8 +2,8 @@
 import { ref, onMounted, computed } from "vue";
 import { UserPlus, Trash2, Pencil } from "lucide-vue-next";
 import {
-  Card, Button, Input, Label, Modal, Avatar, Spinner, MultiSelect,
-  Table, TableHeader, TableBody, TableRow, TableHead, TableCell, useToast,
+  Card, Button, Input, Label, Modal, Avatar, SkeletonTable, MultiSelect,
+  Table, TableHeader, TableBody, TableRow, TableHead, TableCell, useToast, Alert,
 } from "@repo/ui";
 import { Role } from "@repo/shared";
 
@@ -17,12 +17,16 @@ const showAdd = ref(false);
 const saving = ref(false);
 const form = ref({ name: "", email: "", password: "", phone: "" });
 const selectedStudentIds = ref<string[]>([]);
+const formError = ref("");
+const fieldErrors = ref<Record<string, string>>({});
 
 // Edit
 const showEdit = ref(false);
 const editing = ref<any>(null);
 const editForm = ref({ name: "", email: "", phone: "" });
 const savingEdit = ref(false);
+const editFormError = ref("");
+const editFieldErrors = ref<Record<string, string>>({});
 
 // Confirm delete
 const showConfirm = ref(false);
@@ -64,10 +68,14 @@ function resetForm() {
   selectedStudentIds.value = [];
   photoFile.value = null;
   photoPreview.value = "";
+  formError.value = "";
+  fieldErrors.value = {};
 }
 
 async function create() {
   saving.value = true;
+  formError.value = "";
+  fieldErrors.value = {};
   try {
     const { user } = await api<{ user: any }>("/users", {
       method: "POST",
@@ -95,7 +103,9 @@ async function create() {
     resetForm();
     await load();
   } catch (e) {
-    toast({ title: "Failed", description: apiError(e), variant: "destructive" });
+    const fields = apiFieldErrors(e);
+    if (fields) fieldErrors.value = fields;
+    else formError.value = apiError(e);
   } finally {
     saving.value = false;
   }
@@ -104,12 +114,16 @@ async function create() {
 function openEdit(u: any) {
   editing.value = u;
   editForm.value = { name: u.name, email: u.email, phone: u.phone ?? "" };
+  editFormError.value = "";
+  editFieldErrors.value = {};
   showEdit.value = true;
 }
 
 async function saveEdit() {
   if (!editing.value) return;
   savingEdit.value = true;
+  editFormError.value = "";
+  editFieldErrors.value = {};
   try {
     await api(`/users/${editing.value.id}`, {
       method: "PATCH",
@@ -123,7 +137,9 @@ async function saveEdit() {
     showEdit.value = false;
     await load();
   } catch (e) {
-    toast({ title: "Failed", description: apiError(e), variant: "destructive" });
+    const fields = apiFieldErrors(e);
+    if (fields) editFieldErrors.value = fields;
+    else editFormError.value = apiError(e);
   } finally {
     savingEdit.value = false;
   }
@@ -151,10 +167,10 @@ async function remove() {
 <template>
   <div>
     <PageHeader title="Parents" subtitle="Create and manage parent accounts">
-      <template #actions><Button @click="showAdd = true"><UserPlus class="size-4" /> New account</Button></template>
+      <template #actions><Button @click="resetForm(); showAdd = true"><UserPlus class="size-4" /> New account</Button></template>
     </PageHeader>
 
-    <div v-if="loading" class="flex justify-center py-16"><Spinner class="size-7 text-primary" /></div>
+    <SkeletonTable v-if="loading" :rows="5" :cols="4" />
     <template v-else>
       <!-- Mobile: stacked cards -->
       <div class="space-y-3 md:hidden">
@@ -216,6 +232,7 @@ async function remove() {
     <!-- Create -->
     <Modal v-model:open="showAdd" title="New parent account">
       <form class="space-y-3" @submit.prevent="create">
+        <Alert v-if="formError" variant="destructive">{{ formError }}</Alert>
         <div class="flex items-center gap-3">
           <Avatar :name="form.name" :src="photoPreview" class="size-16 text-lg" />
           <label class="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-muted">
@@ -224,11 +241,28 @@ async function remove() {
             <input type="file" accept="image/*" class="hidden" @change="onPhotoPick" />
           </label>
         </div>
-        <div class="space-y-1.5"><Label>Full name</Label><Input v-model="form.name" required /></div>
-        <div class="space-y-1.5"><Label>Email</Label><Input v-model="form.email" type="email" required /></div>
+        <div class="space-y-1.5">
+          <Label>Full name</Label>
+          <Input v-model="form.name" required :class="fieldErrors.name ? 'border-destructive' : ''" />
+          <p v-if="fieldErrors.name" class="text-xs text-destructive">{{ fieldErrors.name }}</p>
+        </div>
+        <div class="space-y-1.5">
+          <Label>Email</Label>
+          <Input v-model="form.email" type="email" required :class="fieldErrors.email ? 'border-destructive' : ''" />
+          <p v-if="fieldErrors.email" class="text-xs text-destructive">{{ fieldErrors.email }}</p>
+        </div>
         <div class="grid grid-cols-2 gap-3">
-          <div class="space-y-1.5"><Label>Password</Label><Input v-model="form.password" type="text" required /></div>
-          <div class="space-y-1.5"><Label>Phone</Label><Input v-model="form.phone" /></div>
+          <div class="space-y-1.5">
+            <Label>Password</Label>
+            <Input v-model="form.password" type="text" required :class="fieldErrors.password ? 'border-destructive' : ''" />
+            <p v-if="fieldErrors.password" class="text-xs text-destructive">{{ fieldErrors.password }}</p>
+            <p v-else class="text-xs text-muted-foreground">At least 6 characters.</p>
+          </div>
+          <div class="space-y-1.5">
+            <Label>Phone</Label>
+            <Input v-model="form.phone" :class="fieldErrors.phone ? 'border-destructive' : ''" />
+            <p v-if="fieldErrors.phone" class="text-xs text-destructive">{{ fieldErrors.phone }}</p>
+          </div>
         </div>
         <div class="space-y-1.5">
           <Label>Linked students <span class="text-muted-foreground font-normal">(optional)</span></Label>
@@ -249,9 +283,22 @@ async function remove() {
     <!-- Edit -->
     <Modal v-model:open="showEdit" :title="`Edit ${editing?.name ?? 'parent'}`">
       <form class="space-y-3" @submit.prevent="saveEdit">
-        <div class="space-y-1.5"><Label>Full name</Label><Input v-model="editForm.name" required /></div>
-        <div class="space-y-1.5"><Label>Email</Label><Input v-model="editForm.email" type="email" required /></div>
-        <div class="space-y-1.5"><Label>Phone</Label><Input v-model="editForm.phone" /></div>
+        <Alert v-if="editFormError" variant="destructive">{{ editFormError }}</Alert>
+        <div class="space-y-1.5">
+          <Label>Full name</Label>
+          <Input v-model="editForm.name" required :class="editFieldErrors.name ? 'border-destructive' : ''" />
+          <p v-if="editFieldErrors.name" class="text-xs text-destructive">{{ editFieldErrors.name }}</p>
+        </div>
+        <div class="space-y-1.5">
+          <Label>Email</Label>
+          <Input v-model="editForm.email" type="email" required />
+          <p class="text-xs text-muted-foreground">Editing email here isn't wired up yet — it won't be saved.</p>
+        </div>
+        <div class="space-y-1.5">
+          <Label>Phone</Label>
+          <Input v-model="editForm.phone" :class="editFieldErrors.phone ? 'border-destructive' : ''" />
+          <p v-if="editFieldErrors.phone" class="text-xs text-destructive">{{ editFieldErrors.phone }}</p>
+        </div>
         <div class="flex justify-end gap-2 pt-2">
           <Button type="button" variant="outline" @click="showEdit = false">Cancel</Button>
           <Button type="submit" :loading="savingEdit">Save</Button>

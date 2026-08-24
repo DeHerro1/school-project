@@ -27,6 +27,16 @@ const weekdayEnum = z.enum([
   Weekday.FRI,
 ]);
 
+// A user id: apps/api's Prisma `User.id` is a Postgres/Supabase Auth UUID,
+// while apps/school's Firestore `users/{uid}` id is a Firebase Auth uid
+// (~28 alphanumeric characters, not UUID-shaped) — this accepts both rather
+// than pinning to one backend's id format via `.uuid()`.
+export const userIdSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9_-]+$/, "Invalid user id");
+
 // ---------- Auth ----------
 // Username rules for staff sign-in: letters, numbers, dot, underscore, hyphen.
 export const usernameSchema = z
@@ -58,14 +68,10 @@ export const registerSchema = z.object({
 export type RegisterInput = z.infer<typeof registerSchema>;
 
 // ---------- Users ----------
-// Admins create accounts. Staff (teacher/admin) sign in with a username, so it
-// is required for those roles; parents keep signing in with their email.
-export const createUserSchema = registerSchema
-  .extend({ username: usernameSchema.optional() })
-  .refine((d) => d.role === Role.PARENT || !!d.username, {
-    message: "Username is required for staff accounts",
-    path: ["username"],
-  });
+// Admins create accounts. Username is optional for everyone — staff can sign
+// in with either one, if they're given one, or their email like parents do
+// (see the "Username or email" login field).
+export const createUserSchema = registerSchema.extend({ username: usernameSchema.optional() });
 export const updateUserSchema = z.object({
   name: z.string().min(2).optional(),
   phone: z.string().min(6).optional(),
@@ -76,7 +82,7 @@ export const updateUserSchema = z.object({
 export const createClassSchema = z.object({
   name: z.string().min(1),
   level: classLevelEnum,
-  homeroomTeacherId: z.string().uuid().optional(),
+  homeroomTeacherId: userIdSchema.optional(),
   studentCount: z.number().int().min(0).optional(),
   subjectsOffered: z.string().max(500).optional(),
 });
@@ -87,6 +93,18 @@ export const updateClassStaffSchema = z.object({
   studentCount: z.number().int().min(0).optional(),
   subjectsOffered: z.string().max(500).optional(),
 });
+
+// ---------- Public landing page: self-serve signup ----------
+// Submitting this creates a real ADMIN account immediately — no review step,
+// no waiting (see apps/school/server/api/auth/register.post.ts). Replaces the
+// old "signup request, a platform admin reviews and creates your account" flow.
+export const selfSignupSchema = z.object({
+  name: z.string().min(2).max(200),
+  email: z.string().email(),
+  password: z.string().min(6),
+  phone: z.string().max(30).optional(),
+});
+export type SelfSignupInput = z.infer<typeof selfSignupSchema>;
 
 export const createSubjectSchema = z.object({
   name: z.string().min(1),
@@ -103,7 +121,7 @@ export const createTimetableSlotSchema = z.object({
   classId: z.string().cuid(),
   subjectId: z.string().cuid(),
   // Optional: activity slots (Lunch, Worship, …) have no teacher.
-  teacherId: z.string().uuid().optional(),
+  teacherId: userIdSchema.optional(),
   day: weekdayEnum,
   period: z.number().int().min(1).max(12),
   startTime: timeString,
@@ -116,7 +134,7 @@ export const createTimetableSlotSchema = z.object({
 // fixed, and `teacherId` may be nulled to turn a slot into a teacher-less activity.
 export const updateTimetableSlotSchema = z.object({
   subjectId: z.string().cuid().optional(),
-  teacherId: z.string().uuid().nullable().optional(),
+  teacherId: userIdSchema.nullable().optional(),
   day: weekdayEnum.optional(),
   period: z.number().int().min(1).max(12).optional(),
   startTime: timeString.optional(),
@@ -142,7 +160,7 @@ export const createStudentSchema = z.object({
 export const updateStudentSchema = createStudentSchema.partial();
 
 export const linkGuardianSchema = z.object({
-  parentUserId: z.string().uuid(),
+  parentUserId: userIdSchema,
   studentId: z.string().cuid(),
   relation: z.string().min(2).default("Parent"),
 });
@@ -221,7 +239,7 @@ export const createProgressReportSchema = z.object({
 
 // ---------- Messaging ----------
 export const sendMessageSchema = z.object({
-  receiverId: z.string().uuid(),
+  receiverId: userIdSchema,
   body: z.string().min(1).max(2000),
 });
 

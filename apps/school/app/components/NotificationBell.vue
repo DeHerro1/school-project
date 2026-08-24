@@ -19,7 +19,7 @@ function timeAgo(iso: string) {
 </script>
 
 <template>
-  <DropdownMenu class="w-80 p-0">
+  <DropdownMenu class="w-[calc(100vw-2rem)] max-w-80 p-0">
     <template #trigger>
       <button
         class="relative inline-flex size-10 items-center justify-center rounded-md hover:bg-accent"

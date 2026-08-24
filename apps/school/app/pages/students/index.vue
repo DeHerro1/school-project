@@ -16,8 +16,9 @@ import {
   Modal,
   Label,
   Select,
-  Spinner,
+  SkeletonTable,
   useToast,
+  Alert,
 } from "@repo/ui";
 import { useAuthStore } from "~/stores/auth";
 
@@ -44,6 +45,8 @@ const emptyForm = () => ({
   address: "",
 });
 const form = ref(emptyForm());
+const formError = ref("");
+const fieldErrors = ref<Record<string, string>>({});
 
 // Optional profile photo, uploaded after the student record is created.
 const photoFile = ref<File | null>(null);
@@ -83,6 +86,8 @@ const classOptions = computed(() =>
 
 async function createStudent() {
   saving.value = true;
+  formError.value = "";
+  fieldErrors.value = {};
   try {
     // Drop empty optional strings so they don't fail min-length validation.
     const payload = Object.fromEntries(
@@ -104,7 +109,9 @@ async function createStudent() {
     photoPreview.value = "";
     await load();
   } catch (e) {
-    toast({ title: "Could not add student", description: apiError(e), variant: "destructive" });
+    const fields = apiFieldErrors(e);
+    if (fields) fieldErrors.value = fields;
+    else formError.value = apiError(e);
   } finally {
     saving.value = false;
   }
@@ -115,7 +122,7 @@ async function createStudent() {
   <div>
     <PageHeader title="Students" subtitle="All enrolled students">
       <template #actions>
-        <Button v-if="auth.role === 'ADMIN'" @click="showAdd = true">
+        <Button v-if="auth.role === 'ADMIN'" @click="formError = ''; fieldErrors = {}; showAdd = true">
           <UserPlus class="size-4" /> Add student
         </Button>
       </template>
@@ -126,7 +133,7 @@ async function createStudent() {
       <Input v-model="search" placeholder="Search students…" class="pl-9" />
     </div>
 
-    <div v-if="loading" class="flex justify-center py-16"><Spinner class="size-7 text-primary" /></div>
+    <SkeletonTable v-if="loading" :rows="6" :cols="5" />
 
     <template v-else>
       <!-- Mobile: tappable cards -->
@@ -187,7 +194,7 @@ async function createStudent() {
               </TableCell>
             </TableRow>
             <TableRow v-if="!filtered.length">
-              <TableCell class="py-10 text-center text-muted-foreground" >
+              <TableCell colspan="5" class="py-10 text-center text-muted-foreground">
                 No students found.
               </TableCell>
             </TableRow>
@@ -198,6 +205,7 @@ async function createStudent() {
 
     <Modal v-model:open="showAdd" title="Add student" description="Enrol a new student.">
       <form class="space-y-3" @submit.prevent="createStudent">
+        <Alert v-if="formError" variant="destructive">{{ formError }}</Alert>
         <div class="flex items-center gap-3">
           <Avatar :name="`${form.firstName} ${form.lastName}`" :src="photoPreview" class="size-16 text-lg" />
           <label class="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-muted">
@@ -209,16 +217,19 @@ async function createStudent() {
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-1.5">
             <Label>First name</Label>
-            <Input v-model="form.firstName" required />
+            <Input v-model="form.firstName" required :class="fieldErrors.firstName ? 'border-destructive' : ''" />
+            <p v-if="fieldErrors.firstName" class="text-xs text-destructive">{{ fieldErrors.firstName }}</p>
           </div>
           <div class="space-y-1.5">
             <Label>Last name</Label>
-            <Input v-model="form.lastName" required />
+            <Input v-model="form.lastName" required :class="fieldErrors.lastName ? 'border-destructive' : ''" />
+            <p v-if="fieldErrors.lastName" class="text-xs text-destructive">{{ fieldErrors.lastName }}</p>
           </div>
         </div>
         <div class="space-y-1.5">
           <Label>Date of birth</Label>
-          <Input v-model="form.dob" type="date" required />
+          <Input v-model="form.dob" type="date" required :class="fieldErrors.dob ? 'border-destructive' : ''" />
+          <p v-if="fieldErrors.dob" class="text-xs text-destructive">{{ fieldErrors.dob }}</p>
         </div>
         <div class="space-y-1.5">
           <Label>Class</Label>

@@ -16,15 +16,22 @@ PostgreSQL + Prisma, and Socket.IO**.
 ```
 final-project/
 ├─ apps/
-│  ├─ api/                Express + Prisma + Socket.IO (TypeScript)               → http://localhost:3001
-│  ├─ school/              Nuxt 4 — admin + teacher portal                        → http://localhost:3000
-│  ├─ parent/              Nuxt 4 — parent portal                                 → http://localhost:3002
-│  └─ schools-backoffice/  Nuxt 4 — platform admin portal (add/edit/suspend schools) → http://localhost:3003
+│  ├─ api/                Express + Prisma + Socket.IO (TypeScript) — legacy backend, see note below
+│  ├─ school/              Nuxt 4 + Firebase — public landing page, the staff (admin/teacher)
+│  │                       portal at /dashboard, and the parent portal at /parent  → http://localhost:3000
+│  └─ schools-backoffice/  Nuxt 4 + Firebase Auth — platform admin portal (add/edit/suspend
+│                          schools, manage admins)                                 → http://localhost:3003
 ├─ packages/
 │  ├─ shared/    Zod schemas, enums, socket events (shared by API + apps)
 │  └─ ui/        Shared shadcn-style Vue components + Tailwind v4 theme
 └─ docker-compose.yml   (optional Postgres if you use Docker)
 ```
+
+`apps/parent` (a separate standalone parent portal) has been retired — its pages were ported into
+`apps/school` under `/parent/**`, on a shared Firestore-backed login instead of a second app. With
+it gone, `apps/api` (Express + Prisma + Postgres) has no remaining caller — `school` and
+`schools-backoffice` don't talk to it — so it's now dead code kept only for reference until it's
+either wired back up or removed.
 
 The frontends import `@repo/ui` (components) and `@repo/shared` (typed request schemas), so the
 client and server never drift.
@@ -69,17 +76,15 @@ Then open:
 
 | App | URL | Who |
 |-----|-----|-----|
-| School portal | http://localhost:3000 | Admins & teachers |
-| Parent portal | http://localhost:3002 | Parents |
-| Schools backoffice | http://localhost:3003 | Platform admins (add/edit/suspend schools) |
-| API | http://localhost:3001/api | — |
+| EduCore | http://localhost:3000 | Public landing page; `/dashboard` for admins & teachers, `/parent` for parents |
+| Schools backoffice | http://localhost:3003 | Platform admins (add/edit/suspend schools, manage admins) |
+| API | http://localhost:3001/api | Unused — kept for reference (see note above) |
 
 ### Run apps individually
 
 ```bash
-pnpm dev:api                  # just the API
-pnpm dev:school                # just the school portal
-pnpm dev:parent                # just the parent portal
+pnpm dev:api                  # the legacy API (currently unused by any frontend)
+pnpm dev:school                # EduCore (landing page + staff + parent)
 pnpm dev:schools-backoffice    # just the schools backoffice
 ```
 
@@ -93,44 +98,52 @@ Password for **all** accounts: `password123`
 |------|-------|-------|
 | Admin | `admin@school.test` | Full management (people, classes, subjects, timetable, fees) |
 | Teacher | `sarah@school.test` | Homeroom of Nursery A |
-| Parent | `john@parent.test` | Children: **Tunde** (first-time) & **Ada** |
-| Parent | `mary@parent.test` | Child: **Zainab** — starts with a **pending absence alert** |
+| Parent | `mary@parent.test` | Child: **Ama Owusu** (Nursery A) — sign in with the email, not a username |
 | Platform admin | `owner@backoffice.test` | Schools backoffice — add/edit/suspend schools |
+
+Every account above — staff/parent in `apps/school`, and the platform admin in
+`schools-backoffice` — lives in Firebase Auth + Firestore (or their local emulator/mock stand-ins),
+seeded by `pnpm firebase:emulators` + `pnpm firebase:seed`. Add more platform admins from
+`schools-backoffice` → *Admins* once signed in as the seeded one — see `server/api/platform-admins/**`
+(there's no public self-signup route; an existing admin has to add you).
 
 ---
 
 ## Try the standout features (end-to-end)
 
 1. **Absence alert → parent reason**
-   - As **teacher** (school portal) → *Attendance* → pick *Nursery A* → mark **Tunde absent** → **Alert parents**.
-   - As **John** (parent portal) → a notification appears; open *Absence alerts* → submit a reason.
+   - As **teacher** (`sarah@school.test`) → *Attendance* → mark **Ama Owusu absent** → **Alert parents**.
+   - As **parent** (`mary@parent.test`, `/parent`) → a notification appears; open *Absence alerts* → submit a reason.
    - Back as the teacher, the reason shows on the alert (also on the dashboard).
 
 2. **Photo to parents**
    - Teacher → open a student → *Photos* tab → **Share a photo** (upload + caption).
    - Parent → *Photos* → the picture appears instantly.
 
-3. **Terminal report + progress/talent guidance**
-   - Teacher → student → *Reports* (add marks / attach PDF) and *Progress & Talent* (strengths,
-     talents, what's needed, how parents can help).
-   - Parent → *Reports* (download) and *Progress & Talent* (read the guidance).
+3. **Term report + progress/talent guidance**
+   - Teacher → student → *Reports* (add marks) and *Progress & Talent* (strengths, talents, what's
+     needed, how parents can help).
+   - Parent → *Reports* and *Progress & Talent* to read them.
 
 4. **Fees, timetable, messaging** round out the platform, all scoped per child.
 
-5. **Onboard a new school (multi-tenant)**
-   - As **Platform Owner** (schools backoffice, `owner@backoffice.test`) → *Schools* → **Add school** →
-     fill in the school's details and its first admin account.
-   - The new school appears with its own (initially empty) student/staff/class counts, completely
-     separate from Sunrise International School's — every tenant-scoped mock route filters by
-     `schoolId`. Suspend it from the detail page and note its status update live.
-   - **Known limitation of the mock layer**: each portal (school/parent/schools-backoffice) is a
-     separate Nuxt app with its own in-memory mock database, so a school (and admin account) created
-     in the backoffice only exists in *that browser tab* — signing in to the school portal as the new
-     admin won't find it there. This is a mock-only artifact, not a tenant-isolation bug; wiring a
-     portal to the real `apps/api` (one shared Postgres database) removes it.
+5. **Manage platform admins**
+   - As **Platform Owner** (schools backoffice, `owner@backoffice.test`) → *Admins* → **Add admin**
+     (name, email, password) → they can sign in immediately and review signup requests / manage
+     schools alongside you.
+   - An admin can't remove their own access, and the last remaining admin can't be removed at all —
+     there's always at least one way in.
 
-Notifications and photo/alert events are pushed in real time over **Socket.IO** (the bell badge
-updates live).
+6. **Instant self-serve signup**
+   - Submit the "Get started" form on the public landing page (`http://localhost:3000/`) — name,
+     email, phone (optional), password.
+   - There's no review step: the account is created as `ADMIN` and you're signed straight in to
+     `/dashboard`, ready to add classes, students and staff.
+   - **Note**: this app's Firestore is single-tenant (one shared school, seeded as "Sunrise
+     International School") — self-signup creates a new admin *account* on that same school, not a
+     separate tenant. Onboarding an actually separate school is still `schools-backoffice`'s job
+     (*Schools* → **Add school**), which remains on its own mock layer, unrelated to `apps/school`'s
+     real Firestore — see the architecture note below.
 
 ---
 
@@ -154,8 +167,15 @@ pnpm --filter api typecheck
   by swapping `useApi()` back to an `$fetch.create({ baseURL })` client.
 - **Multi-tenancy**: every school is a `School` row; `User`, `Class`, `Subject` and `Student` each
   carry a `schoolId`. Platform admins (schools-backoffice) are a separate account model with their
-  own login — decoupled from the `ADMIN`/`TEACHER`/`PARENT` `Role` used by the school/parent portals
-  — and are the only accounts that can create, edit or suspend a `School`.
+  own login and their own `platformAdmins` Firestore collection — decoupled from the
+  `ADMIN`/`TEACHER`/`PARENT` `Role` used by the school/parent portals — and are the only accounts
+  that can create, edit or suspend a `School`, or add/remove another platform admin (real Firebase
+  Auth + `server/api/platform-admins/**`, not the mock; see `schools-backoffice`'s
+  `server/utils/auth.ts`).
+- **Self-serve signup**: `apps/school`'s public landing page posts to `server/api/auth/register.post.ts`
+  (no auth required, unlike every other `/api/**` route) — it provisions a real Firebase Auth +
+  Firestore `ADMIN` account on the spot (username auto-generated from the submitted name) and the
+  browser signs straight into it. No platform-admin review step exists any more.
 - **Auth**: JWT access + rotating refresh tokens (argon2 password hashing). Two SPA portals share
   one stateless API; each guards its own role (`ADMIN`/`TEACHER` for school, `PARENT` for parent).
 - **Authorization**: parents are scoped to their own children via `Guardianship`; every parent-facing

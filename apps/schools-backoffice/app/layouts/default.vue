@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { LayoutDashboard, Building2, Menu, LogOut, ShieldCheck } from "lucide-vue-next";
-import { Avatar, DropdownMenu, DropdownMenuItem } from "@repo/ui";
+import { LayoutDashboard, Building2, Menu, LogOut, ShieldCheck, Users } from "lucide-vue-next";
+import { Avatar, DropdownMenu, DropdownMenuItem, ThemeToggle } from "@repo/ui";
 import { useAuthStore } from "~/stores/auth";
 
 const auth = useAuthStore();
 const { logout } = useAuth();
 const route = useRoute();
 const mobileOpen = ref(false);
+const colorMode = useColorMode();
 
 const nav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/schools", label: "Schools", icon: Building2 },
+  { to: "/admins", label: "Admins", icon: Users },
 ];
 
 const isActive = (to: string) =>
@@ -65,6 +67,7 @@ const isActive = (to: string) =>
         </button>
         <div class="hidden lg:block" />
         <div class="flex items-center gap-2">
+          <ThemeToggle v-model="colorMode.preference" />
           <DropdownMenu>
             <template #trigger>
               <button class="flex items-center gap-2 rounded-md p-1 hover:bg-accent">
