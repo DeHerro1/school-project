@@ -9,6 +9,7 @@ export default defineEventHandler(async (event) => {
     studentId: fields.studentId,
     caption: fields.caption || undefined,
   });
+  await assertStudentInSchool(body.studentId, user.schoolId);
 
   const fileUrl = await storageUrl(file);
   const doc: MediaDoc = {

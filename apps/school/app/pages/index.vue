@@ -183,6 +183,7 @@ const faqs = [
 
 // ------------------------------------------------------------------ form ----
 const form = ref({
+  schoolName: "",
   contactName: "",
   contactEmail: "",
   contactPhone: "",
@@ -190,10 +191,15 @@ const form = ref({
 });
 const submitting = ref(false);
 const error = ref("");
-// Maps the server's schema field names (name/email/phone) back to this
-// form's own field names (contactName/contactEmail/contactPhone) so the
+// Maps the server's schema field names (schoolName/name/email/phone) back to
+// this form's own field names (contactName/contactEmail/contactPhone) so the
 // right input gets highlighted.
-const FIELD_MAP: Record<string, string> = { name: "contactName", email: "contactEmail", phone: "contactPhone" };
+const FIELD_MAP: Record<string, string> = {
+  schoolName: "schoolName",
+  name: "contactName",
+  email: "contactEmail",
+  phone: "contactPhone",
+};
 const fieldErrors = ref<Record<string, string>>({});
 
 // Creates the account immediately (no platform-admin review) and signs the
@@ -206,6 +212,7 @@ async function onSubmit() {
     await api("/auth/register", {
       method: "POST",
       body: {
+        schoolName: form.value.schoolName,
         name: form.value.contactName,
         email: form.value.contactEmail,
         password: form.value.password,
@@ -442,8 +449,8 @@ async function onSubmit() {
       <div class="mx-auto max-w-6xl px-4 py-16 sm:px-6">
         <div class="flex flex-col items-center gap-6 rounded-2xl bg-primary px-6 py-12 text-center text-primary-foreground sm:px-12">
           <Users class="size-8" />
-          <h2 class="text-3xl font-bold tracking-tight">Ready to bring EduCore to your school?</h2>
-          <p class="max-w-xl text-primary-foreground/80">
+          <h2 class="text-3xl font-bold tracking-tight dark:text-white">Ready to bring EduCore to your school?</h2>
+          <p class="max-w-xl text-primary-foreground/80 dark:text-white/80">
             Create your account below and start managing your school right away — no waiting.
           </p>
           <Button size="lg" variant="secondary" :as="'div'">
@@ -481,6 +488,11 @@ async function onSubmit() {
           <CardContent class="pt-6">
             <form class="space-y-4" @submit.prevent="onSubmit">
               <Alert v-if="error" variant="destructive">{{ error }}</Alert>
+              <div class="space-y-1.5">
+                <Label for="schoolName">School name</Label>
+                <Input id="schoolName" v-model="form.schoolName" required :class="fieldErrors.schoolName ? 'border-destructive' : ''" />
+                <p v-if="fieldErrors.schoolName" class="text-xs text-destructive">{{ fieldErrors.schoolName }}</p>
+              </div>
               <div class="grid gap-4 sm:grid-cols-2">
                 <div class="space-y-1.5">
                   <Label for="contactName">Your name</Label>

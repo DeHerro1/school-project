@@ -2,7 +2,6 @@
 import { ref, onMounted, computed } from "vue";
 import {
   Calendar,
-  Camera,
   FileText,
   Sparkles,
   UserCircle,
@@ -54,14 +53,12 @@ const fileUrl = (u?: string | null) =>
 const tab = ref("profile");
 const tabs = [
   { value: "profile", label: "Profile" },
-  { value: "photos", label: "Photos" },
   { value: "reports", label: "Reports" },
   { value: "progress", label: "Progress & Talent" },
 ];
 
 const loading = ref(true);
 const student = ref<any>(null);
-const media = ref<any[]>([]);
 const reports = ref<any[]>([]);
 const progress = ref<any[]>([]);
 const subjects = ref<any[]>([]);
@@ -71,14 +68,12 @@ const classes = ref<any[]>([]);
 async function loadAll() {
   loading.value = true;
   try {
-    const [s, m, r, p] = await Promise.all([
+    const [s, r, p] = await Promise.all([
       api<{ student: any }>(`/students/${studentId}`),
-      api<{ media: any[] }>(`/media?studentId=${studentId}`),
       api<{ reports: any[] }>(`/reports?studentId=${studentId}`),
       api<{ reports: any[] }>(`/progress?studentId=${studentId}`),
     ]);
     student.value = s.student;
-    media.value = m.media;
     reports.value = r.reports;
     progress.value = p.reports;
   } finally {
@@ -178,71 +173,6 @@ const shareReportPortal = (r: any) =>
   shareToPortal(`report-${r.id}`, `/reports/${r.id}/share`, "Report sent to parent portal");
 const shareProgressPortal = (p: any) =>
   shareToPortal(`progress-${p.id}`, `/progress/${p.id}/share`, "Progress update sent to parent portal");
-
-// ---------- Photo share ----------
-const photoModal = ref(false);
-const photoFile = ref<File | null>(null);
-const caption = ref("");
-const sharing = ref(false);
-const photoFormError = ref("");
-function onPhotoPick(e: Event) {
-  photoFile.value = (e.target as HTMLInputElement).files?.[0] ?? null;
-}
-async function sharePhoto(target: "portal" | "whatsapp") {
-  if (!photoFile.value) return;
-  sharing.value = true;
-  photoFormError.value = "";
-  try {
-    const fd = new FormData();
-    fd.append("file", photoFile.value);
-    fd.append("studentId", studentId);
-    if (caption.value) fd.append("caption", caption.value);
-    const res = await api<{ media: any }>("/media", { method: "POST", body: fd });
-
-    if (target === "whatsapp") {
-      const phone = (student.value?.guardianPhone ?? "").replace(/[^0-9]/g, "");
-      const link = fileUrl(res.media?.fileUrl) ?? "";
-      const text = encodeURIComponent(
-        [caption.value?.trim(), link].filter(Boolean).join("\n"),
-      );
-      const waUrl = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`;
-      window.open(waUrl, "_blank", "noopener");
-      toast({ title: "Opening WhatsApp…", variant: "success" });
-    } else {
-      toast({ title: "Photo shared to parent portal", variant: "success" });
-    }
-
-    photoModal.value = false;
-    caption.value = "";
-    photoFile.value = null;
-    const m = await api<{ media: any[] }>(`/media?studentId=${studentId}`);
-    media.value = m.media;
-  } catch (e) {
-    photoFormError.value = apiError(e);
-  } finally {
-    sharing.value = false;
-  }
-}
-
-// ---------- Profile photo ----------
-const avatarUploading = ref(false);
-async function uploadAvatar(e: Event) {
-  const f = (e.target as HTMLInputElement).files?.[0];
-  if (!f) return;
-  avatarUploading.value = true;
-  try {
-    const fd = new FormData();
-    fd.append("file", f);
-    const res = await api<{ student: any }>(`/students/${studentId}/photo`, {
-      method: "POST",
-      body: fd,
-    });
-    student.value.photoUrl = res.student.photoUrl;
-    toast({ title: "Photo updated", variant: "success" });
-  } finally {
-    avatarUploading.value = false;
-  }
-}
 
 // ---------- Term report ----------
 // Each term report is collapsible; the most recent one starts expanded.
@@ -448,13 +378,7 @@ const parentOptions = computed(() =>
     </div>
     <template v-else-if="student">
       <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center">
-        <div class="relative">
-          <Avatar :name="`${student.firstName} ${student.lastName}`" :src="fileUrl(student.photoUrl)" class="size-20 text-xl" />
-          <label class="absolute -bottom-1 -right-1 flex size-7 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground shadow">
-            <Camera class="size-3.5" />
-            <input type="file" accept="image/*" class="hidden" @change="uploadAvatar" />
-          </label>
-        </div>
+        <Avatar :name="`${student.firstName} ${student.lastName}`" :src="fileUrl(student.photoUrl)" class="size-20 text-xl" />
         <div class="flex-1">
           <h1 class="text-2xl font-bold">{{ student.firstName }} {{ student.lastName }}</h1>
           <p class="text-sm text-muted-foreground">
@@ -529,27 +453,6 @@ const parentOptions = computed(() =>
                   </div>
                   <p v-if="linkGuardianError" class="text-xs text-destructive">{{ linkGuardianError }}</p>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        </template>
-
-        <!-- PHOTOS -->
-        <template #photos>
-          <div class="mb-4 flex justify-end">
-            <Button @click="photoFormError = ''; photoModal = true"><Camera class="size-4" /> Share a photo</Button>
-          </div>
-          <EmptyState v-if="!media.length" title="No photos shared yet" description="Capture a moment and share it with the parents.">
-            <template #icon><Camera /></template>
-          </EmptyState>
-          <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Card v-for="m in media" :key="m.id" class="overflow-hidden">
-              <img :src="fileUrl(m.fileUrl)" :alt="m.caption" class="aspect-video w-full object-cover" />
-              <CardContent class="pt-4">
-                <p v-if="m.caption" class="text-sm">{{ m.caption }}</p>
-                <p class="mt-1 text-xs text-muted-foreground">
-                  by {{ m.teacher.name }} · {{ new Date(m.createdAt).toLocaleDateString() }}
-                </p>
               </CardContent>
             </Card>
           </div>
@@ -672,27 +575,6 @@ const parentOptions = computed(() =>
         </template>
       </Tabs>
     </template>
-
-    <!-- Share photo modal -->
-    <Modal v-model:open="photoModal" title="Share a photo" description="Send a photo of this student to their parents.">
-      <div class="space-y-3">
-        <Alert v-if="photoFormError" variant="destructive">{{ photoFormError }}</Alert>
-        <input type="file" accept="image/*" @change="onPhotoPick" />
-        <Textarea v-model="caption" placeholder="Add a caption (optional)…" />
-        <div>
-          <p class="mb-2 text-xs font-medium text-muted-foreground">Choose how to share</p>
-          <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" @click="photoModal = false">Cancel</Button>
-            <Button variant="outline" :loading="sharing" :disabled="!photoFile" @click="sharePhoto('portal')">
-              <UserCircle class="size-4" /> Parent portal
-            </Button>
-            <Button :loading="sharing" :disabled="!photoFile" @click="sharePhoto('whatsapp')">
-              <MessageCircle class="size-4" /> WhatsApp
-            </Button>
-          </div>
-        </div>
-      </div>
-    </Modal>
 
     <!-- Term report modal -->
     <Modal v-model:open="reportModal" title="New term report" description="Publish a report; parents are notified." class="max-w-xl">

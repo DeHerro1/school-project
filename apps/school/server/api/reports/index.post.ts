@@ -9,8 +9,8 @@ export default defineEventHandler(async (event) => {
   const body = await validateBody(event, createTermReportSchema);
 
   const studentSnap = await collections.students().doc(body.studentId).get();
-  if (!studentSnap.exists) throw httpError(404, "Student not found");
-  const student = studentSnap.data() as StudentDoc;
+  const student = studentSnap.exists ? (studentSnap.data() as StudentDoc) : null;
+  if (!student || student.schoolId !== user.schoolId) throw httpError(404, "Student not found");
 
   const doc: TermReportDoc = {
     studentId: body.studentId,

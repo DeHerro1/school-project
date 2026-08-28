@@ -1,4 +1,4 @@
-import { Role, Weekday } from "@repo/shared";
+import { LUNCH_SUBJECT, LUNCH_SUBJECT_ID, Role, Weekday } from "@repo/shared";
 import type { SubjectDoc, TimetableSlotDoc, UserDoc, ClassDoc } from "../../utils/firebase";
 
 const dayOrder: Record<string, number> = { MON: 0, TUE: 1, WED: 2, THU: 3, FRI: 4 };
@@ -14,7 +14,9 @@ async function findSlots(classId?: string | string[]) {
   const snap = await ref.get();
   const slots = snap.docs.map((d) => ({ id: d.id, ...(d.data() as TimetableSlotDoc) }));
 
-  const subjectIds = [...new Set(slots.map((s) => s.subjectId))];
+  // Lunch isn't a real `subjects` doc (see LUNCH_SUBJECT_ID) — excluded from
+  // the batch-get and resolved to the hardcoded LUNCH_SUBJECT below instead.
+  const subjectIds = [...new Set(slots.map((s) => s.subjectId).filter((id) => id !== LUNCH_SUBJECT_ID))];
   const teacherIds = [...new Set(slots.map((s) => s.teacherId).filter((id): id is string => !!id))];
   const classIds = [...new Set(slots.map((s) => s.classId))];
 
@@ -30,15 +32,26 @@ async function findSlots(classId?: string | string[]) {
   return slots
     .map((s) => ({
       ...s,
-      subject: subjectById.has(s.subjectId)
-        ? { id: s.subjectId, name: subjectById.get(s.subjectId)!.name }
-        : null,
+      subject:
+        s.subjectId === LUNCH_SUBJECT_ID
+          ? { id: LUNCH_SUBJECT.id, name: LUNCH_SUBJECT.name, isActivity: LUNCH_SUBJECT.isActivity }
+          : subjectById.has(s.subjectId)
+            ? {
+                id: s.subjectId,
+                name: subjectById.get(s.subjectId)!.name,
+                isActivity: subjectById.get(s.subjectId)!.isActivity,
+              }
+            : null,
       teacher: s.teacherId && teacherById.has(s.teacherId)
         ? { id: s.teacherId, name: teacherById.get(s.teacherId)!.name }
         : null,
       class: classById.has(s.classId) ? { id: s.classId, name: classById.get(s.classId)!.name } : null,
     }))
-    .sort((a, b) => (dayOrder[a.day] ?? 0) - (dayOrder[b.day] ?? 0) || a.period - b.period);
+    .sort(
+      (a, b) =>
+        (dayOrder[a.day] ?? 0) - (dayOrder[b.day] ?? 0) ||
+        (a.startTime ?? "").localeCompare(b.startTime ?? ""),
+    );
 }
 
 export default defineEventHandler(async (event) => {
@@ -51,8 +64,11 @@ export default defineEventHandler(async (event) => {
   if (studentId) {
     if (user.role === Role.PARENT) await assertParentOwnsStudent(user.id, studentId);
     const studentSnap = await collections.students().doc(studentId).get();
-    if (!studentSnap.exists) throw httpError(404, "Student not found");
-    classId = (studentSnap.data() as { classId: string | null }).classId ?? undefined;
+    const student = studentSnap.exists ? (studentSnap.data() as { classId: string | null; schoolId: string }) : null;
+    if (!student || (user.role !== Role.PARENT && student.schoolId !== user.schoolId)) {
+      throw httpError(404, "Student not found");
+    }
+    classId = student.classId ?? undefined;
     if (!classId) return { slots: [] };
     return { slots: await findSlots(classId) };
   }
@@ -71,5 +87,13 @@ export default defineEventHandler(async (event) => {
     return { slots: await findSlots(ownClassIds) };
   }
 
-  return { slots: await findSlots(classId) };
+  // Admins: scoped to their own school's classes — never another school's.
+  if (classId) {
+    await assertClassInSchool(classId, user.schoolId);
+    return { slots: await findSlots(classId) };
+  }
+  const ownClassesSnap = await collections.classes().where("schoolId", "==", user.schoolId).get();
+  const ownClassIds = ownClassesSnap.docs.map((d) => d.id);
+  if (ownClassIds.length === 0) return { slots: [] };
+  return { slots: await findSlots(ownClassIds) };
 });

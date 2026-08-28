@@ -5,6 +5,7 @@ import type { ProgressDoc, StudentDoc } from "../../utils/firebase";
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event, [Role.ADMIN, Role.TEACHER]);
   const body = await validateBody(event, createProgressReportSchema);
+  await assertStudentInSchool(body.studentId, user.schoolId);
 
   const doc: ProgressDoc = {
     studentId: body.studentId,

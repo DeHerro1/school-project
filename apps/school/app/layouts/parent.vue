@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from "vue";
 import {
-  LayoutDashboard, Camera, BellRing, FileText, Sparkles, CalendarDays, Receipt, MessageCircle, LogOut, Heart,
+  LayoutDashboard, BellRing, FileText, Sparkles, CalendarDays, Receipt, MessageCircle, LogOut, Heart,
 } from "lucide-vue-next";
 import { Avatar, DropdownMenu, DropdownMenuItem, Select } from "@repo/ui";
 import { useAuthStore } from "~/stores/auth";
@@ -19,7 +19,6 @@ onMounted(async () => {
 const nav = [
   { to: "/parent", label: "Overview", icon: LayoutDashboard },
   { to: "/parent/alerts", label: "Absence alerts", icon: BellRing },
-  { to: "/parent/photos", label: "Photos", icon: Camera },
   { to: "/parent/reports", label: "Reports", icon: FileText },
   { to: "/parent/progress", label: "Progress & Talent", icon: Sparkles },
   { to: "/parent/timetable", label: "Timetable", icon: CalendarDays },
@@ -37,9 +36,9 @@ const childOptions = computed(() =>
   <div class="min-h-screen bg-muted/30">
     <header class="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
       <div class="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4">
-        <div class="flex items-center gap-2">
-          <Heart class="size-6 text-primary" />
-          <span class="text-lg font-bold">EduCore</span>
+        <div class="flex min-w-0 items-center gap-2">
+          <Heart class="size-6 shrink-0 text-primary" />
+          <span class="truncate text-lg font-bold">{{ auth.user?.schoolName || "EduCore" }}</span>
         </div>
         <div class="flex items-center gap-2">
           <Select

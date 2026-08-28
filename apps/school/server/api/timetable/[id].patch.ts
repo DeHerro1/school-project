@@ -1,4 +1,4 @@
-import { updateTimetableSlotSchema, Role } from "@repo/shared";
+import { updateTimetableSlotSchema, LUNCH_SUBJECT_ID, Role } from "@repo/shared";
 import type { TimetableSlotDoc } from "../../utils/firebase";
 
 export default defineEventHandler(async (event) => {
@@ -18,6 +18,8 @@ export default defineEventHandler(async (event) => {
     if (body.teacherId && body.teacherId !== user.id) {
       throw httpError(403, "Staff can only assign timetable slots to themselves");
     }
+  } else {
+    await assertClassInSchool(slot.classId, user.schoolId);
   }
 
   const day = body.day ?? slot.day;
@@ -34,7 +36,15 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  await ref.update(body as Partial<TimetableSlotDoc>);
+  // Lunch is teacher-less and period-less — force both when the slot is (or
+  // is becoming) Lunch, regardless of what was sent.
+  const patch: Partial<TimetableSlotDoc> = { ...body };
+  if ((body.subjectId ?? slot.subjectId) === LUNCH_SUBJECT_ID) {
+    patch.teacherId = null;
+    patch.period = null;
+  }
+
+  await ref.update(patch);
   const updated = await ref.get();
   return { slot: { id, ...(updated.data() as TimetableSlotDoc) } };
 });

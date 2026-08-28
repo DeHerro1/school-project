@@ -3,12 +3,13 @@ import type { StudentDoc, ClassDoc } from "../../../utils/firebase";
 
 // Share a student's profile with their parents via the parent portal.
 export default defineEventHandler(async (event) => {
-  await requireUser(event, [Role.ADMIN, Role.TEACHER]);
+  const user = await requireUser(event, [Role.ADMIN, Role.TEACHER]);
   const id = getRouterParam(event, "id")!;
 
   const snap = await collections.students().doc(id).get();
   if (!snap.exists) throw httpError(404, "Student not found");
   const student = snap.data() as StudentDoc;
+  if (student.schoolId !== user.schoolId) throw httpError(404, "Student not found");
   const klass = student.classId ? await collections.classes().doc(student.classId).get() : null;
   const className = klass?.exists ? (klass.data() as ClassDoc).name : undefined;
 

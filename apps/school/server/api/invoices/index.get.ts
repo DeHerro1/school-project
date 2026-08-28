@@ -10,10 +10,12 @@ export default defineEventHandler(async (event) => {
   if (user.role === Role.PARENT) {
     if (!studentId) throw httpError(400, "studentId is required");
     await assertParentOwnsStudent(user.id, studentId);
+  } else if (studentId) {
+    await assertStudentInSchool(studentId, user.schoolId);
   }
 
   let ref = collections.invoices() as FirebaseFirestore.Query;
-  if (studentId) ref = ref.where("studentId", "==", studentId);
+  ref = studentId ? ref.where("studentId", "==", studentId) : ref.where("schoolId", "==", user.schoolId);
   const snap = await ref.get();
   const invoices = snap.docs
     .map((d) => ({ id: d.id, ...(d.data() as InvoiceDoc) }))

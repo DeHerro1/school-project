@@ -5,6 +5,7 @@ import {
   AttendanceStatus,
   Weekday,
   InvoiceStatus,
+  LUNCH_SUBJECT_ID,
 } from "./enums";
 
 const roleEnum = z.enum([Role.ADMIN, Role.TEACHER, Role.PARENT]);
@@ -99,6 +100,7 @@ export const updateClassStaffSchema = z.object({
 // no waiting (see apps/school/server/api/auth/register.post.ts). Replaces the
 // old "signup request, a platform admin reviews and creates your account" flow.
 export const selfSignupSchema = z.object({
+  schoolName: z.string().min(2).max(200),
   name: z.string().min(2).max(200),
   email: z.string().email(),
   password: z.string().min(6),
@@ -117,26 +119,37 @@ const timeString = z
   .string()
   .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Time must be in HH:MM format");
 
-export const createTimetableSlotSchema = z.object({
-  classId: z.string().cuid(),
-  subjectId: z.string().cuid(),
-  // Optional: activity slots (Lunch, Worship, …) have no teacher.
-  teacherId: userIdSchema.optional(),
-  day: weekdayEnum,
-  period: z.number().int().min(1).max(12),
-  startTime: timeString,
-  endTime: timeString,
-  // Repeat the slot on every school day (Mon–Fri) for the term.
-  repeat: z.boolean().optional(),
-});
+// Lunch is a built-in pseudo-subject (see LUNCH_SUBJECT_ID) — its slots
+// aren't backed by a real Subjects record, so `subjectId` accepts that one
+// reserved literal alongside a normal subject's cuid.
+const subjectIdSchema = z.union([z.string().cuid(), z.literal(LUNCH_SUBJECT_ID)]);
+
+export const createTimetableSlotSchema = z
+  .object({
+    classId: z.string().cuid(),
+    subjectId: subjectIdSchema,
+    // Optional: activity slots (Lunch, Worship, …) have no teacher.
+    teacherId: userIdSchema.optional(),
+    day: weekdayEnum,
+    // Optional: Lunch doesn't need a period — see the refine() below.
+    period: z.number().int().min(1).max(12).optional(),
+    startTime: timeString,
+    endTime: timeString,
+    // Repeat the slot on every school day (Mon–Fri) for the term.
+    repeat: z.boolean().optional(),
+  })
+  .refine((data) => data.subjectId === LUNCH_SUBJECT_ID || data.period !== undefined, {
+    message: "Period is required",
+    path: ["period"],
+  });
 
 // Editing an existing slot: every field is optional, the class it belongs to is
 // fixed, and `teacherId` may be nulled to turn a slot into a teacher-less activity.
 export const updateTimetableSlotSchema = z.object({
-  subjectId: z.string().cuid().optional(),
+  subjectId: subjectIdSchema.optional(),
   teacherId: userIdSchema.nullable().optional(),
   day: weekdayEnum.optional(),
-  period: z.number().int().min(1).max(12).optional(),
+  period: z.number().int().min(1).max(12).nullable().optional(),
   startTime: timeString.optional(),
   endTime: timeString.optional(),
 });

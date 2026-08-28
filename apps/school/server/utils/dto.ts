@@ -11,5 +11,6 @@ export function publicUser(id: string, doc: UserDoc) {
     phone: doc.phone,
     avatarUrl: doc.avatarUrl,
     createdAt: doc.createdAt,
+    schoolId: doc.schoolId,
   };
 }

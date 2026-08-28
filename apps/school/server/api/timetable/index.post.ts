@@ -1,4 +1,4 @@
-import { createTimetableSlotSchema, Role, Weekday } from "@repo/shared";
+import { createTimetableSlotSchema, LUNCH_SUBJECT_ID, Role, Weekday } from "@repo/shared";
 import type { TimetableSlotDoc } from "../../utils/firebase";
 
 /** True if a slot already exists at this class/day/startTime (the old @@unique). */
@@ -24,14 +24,18 @@ export default defineEventHandler(async (event) => {
   }
   if (user.role === Role.TEACHER) {
     await assertTeacherOwnsClass(user.id, body.classId);
+  } else {
+    await assertClassInSchool(body.classId, user.schoolId);
   }
 
   const { repeat, ...data } = body;
+  const isLunch = data.subjectId === LUNCH_SUBJECT_ID;
   const base: Omit<TimetableSlotDoc, "day"> = {
     classId: data.classId,
     subjectId: data.subjectId,
-    teacherId: data.teacherId ?? null,
-    period: data.period,
+    // Lunch is teacher-less and period-less, regardless of what was sent.
+    teacherId: isLunch ? null : (data.teacherId ?? null),
+    period: isLunch ? null : (data.period ?? null),
     startTime: data.startTime,
     endTime: data.endTime,
   };

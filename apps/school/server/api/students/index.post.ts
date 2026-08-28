@@ -9,6 +9,8 @@ export default defineEventHandler(async (event) => {
   if (user.role === Role.TEACHER) {
     if (!body.classId) throw httpError(400, "A class is required");
     await assertTeacherOwnsClass(user.id, body.classId);
+  } else if (body.classId) {
+    await assertClassInSchool(body.classId, user.schoolId);
   }
 
   const doc: StudentDoc = {
@@ -25,6 +27,7 @@ export default defineEventHandler(async (event) => {
     secondaryGuardianPhone: body.secondaryGuardianPhone ?? null,
     address: body.address ?? null,
     createdAt: new Date().toISOString(),
+    schoolId: user.schoolId,
   };
   // cuid-shaped id (see server/utils/id.ts) — almost every schema that
   // references a student (attendance, alerts, guardianships, ...) validates

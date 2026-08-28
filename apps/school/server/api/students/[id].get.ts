@@ -1,12 +1,18 @@
+import { Role } from "@repo/shared";
 import type { StudentDoc, GuardianshipDoc, ClassDoc, UserDoc } from "../../utils/firebase";
 
 export default defineEventHandler(async (event) => {
-  await requireUser(event);
+  const user = await requireUser(event);
   const id = getRouterParam(event, "id")!;
 
   const snap = await collections.students().doc(id).get();
   if (!snap.exists) throw httpError(404, "Student not found");
   const s = snap.data() as StudentDoc;
+
+  // A parent may only view their own child's profile; staff only their own
+  // school's students.
+  if (user.role === Role.PARENT) await assertParentOwnsStudent(user.id, id);
+  else if (s.schoolId !== user.schoolId) throw httpError(404, "Student not found");
 
   const [classSnap, guardianshipsSnap] = await Promise.all([
     s.classId ? collections.classes().doc(s.classId).get() : null,

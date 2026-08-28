@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, watch } from "vue";
 import { Plus, Trash2, Pencil } from "lucide-vue-next";
 import {
   Card, Button, Input, Label, Select, MultiSelect, Modal, Badge, SkeletonTable,
@@ -61,24 +61,35 @@ const subjectOptions = computed(() =>
 const toList = (s?: string | null) =>
   (s ?? "").split(",").map((v) => v.trim()).filter(Boolean);
 
+// Only admins can list users; staff don't pick homeroom teachers. Split out
+// so it can also be re-run if `isAdmin` only becomes true *after* mount —
+// auth.role resolves asynchronously (Firebase auth restore + /auth/me), so
+// on first paint it can still read as non-admin even for an admin who just
+// hasn't had their role hydrated yet; without this, the one-shot fetch in
+// load() would silently skip the request and the homeroom-teacher dropdown
+// would stay empty for the rest of the page's life.
+async function loadTeachers() {
+  if (!isAdmin.value) return;
+  const { users } = await api<{ users: any[] }>("/users?role=TEACHER");
+  teachers.value = users;
+}
+
 async function load() {
   loading.value = true;
   try {
-    const reqs: Promise<any>[] = [
+    const [c, s] = await Promise.all([
       api<{ classes: any[] }>("/classes"),
       api<{ subjects: any[] }>("/subjects"),
-    ];
-    // Only admins can list users; staff don't pick homeroom teachers.
-    if (isAdmin.value) reqs.push(api<{ users: any[] }>("/users?role=TEACHER"));
-    const [c, s, t] = await Promise.all(reqs);
+    ]);
     classes.value = c.classes;
     subjects.value = s.subjects;
-    teachers.value = t?.users ?? [];
+    await loadTeachers();
   } finally {
     loading.value = false;
   }
 }
 onMounted(load);
+watch(isAdmin, (v) => { if (v) loadTeachers(); });
 
 async function create() {
   saving.value = true;
@@ -111,7 +122,10 @@ async function create() {
 function openEdit(c: any) {
   editing.value = c;
   editForm.value = {
-    studentCount: c.studentCount ?? "",
+    // Falls back to the actual enrolled count (see classes/index.get.ts's
+    // _count.students) so the field never shows blank for a class that was
+    // never given an explicit roll count.
+    studentCount: c.studentCount ?? c._count?.students ?? "",
     subjectsOffered: toList(c.subjectsOffered),
     homeroomTeacherId: c.homeroomTeacherId ?? NONE_TEACHER,
   };

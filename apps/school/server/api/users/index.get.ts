@@ -3,11 +3,11 @@ import type { UserDoc } from "../../utils/firebase";
 
 // List users, optionally filtered by role (?role=TEACHER)
 export default defineEventHandler(async (event) => {
-  await requireUser(event, [Role.ADMIN]);
+  const admin = await requireUser(event, [Role.ADMIN]);
   const query = getQuery(event);
   const role = typeof query.role === "string" ? query.role : undefined;
 
-  let ref = collections.users() as FirebaseFirestore.Query;
+  let ref = collections.users().where("schoolId", "==", admin.schoolId) as FirebaseFirestore.Query;
   if (role) ref = ref.where("role", "==", role);
   const snap = await ref.get();
 

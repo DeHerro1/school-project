@@ -27,15 +27,6 @@ const roleOptions = [
   { value: Role.ADMIN, label: "Admin" },
 ];
 
-// Optional profile photo, uploaded after the account is created.
-const photoFile = ref<File | null>(null);
-const photoPreview = ref<string>("");
-function onPhotoPick(e: Event) {
-  const f = (e.target as HTMLInputElement).files?.[0] ?? null;
-  photoFile.value = f;
-  photoPreview.value = f ? URL.createObjectURL(f) : "";
-}
-
 async function load() {
   loading.value = true;
   try {
@@ -63,17 +54,9 @@ async function create() {
         phone: form.value.phone || undefined,
       },
     });
-    // Upload the profile photo once the account exists.
-    if (photoFile.value) {
-      const fd = new FormData();
-      fd.append("file", photoFile.value);
-      await api(`/users/${user.id}/avatar`, { method: "POST", body: fd });
-    }
     toast({ title: "Account created", variant: "success" });
     showAdd.value = false;
     form.value = { name: "", email: "", password: "", phone: "", role: Role.TEACHER };
-    photoFile.value = null;
-    photoPreview.value = "";
     await load();
   } catch (e) {
     // Validation failures (wrong password length, bad email, etc.) point at
@@ -162,14 +145,6 @@ async function remove(id: string) {
     <Modal v-model:open="showAdd" title="New account">
       <form class="space-y-3" @submit.prevent="create">
         <Alert v-if="formError" variant="destructive">{{ formError }}</Alert>
-        <div class="flex items-center gap-3">
-          <Avatar :name="form.name" :src="photoPreview" class="size-16 text-lg" />
-          <label class="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-muted">
-            <UserPlus class="size-4" />
-            {{ photoFile ? "Change photo" : "Add photo" }}
-            <input type="file" accept="image/*" class="hidden" @change="onPhotoPick" />
-          </label>
-        </div>
         <div class="space-y-1.5"><Label>Role</Label><Select v-model="form.role" :options="roleOptions" /></div>
         <div class="space-y-1.5">
           <Label>Full name</Label>

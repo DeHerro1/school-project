@@ -49,6 +49,17 @@ export const TERM_OPTIONS: { value: Term; label: string }[] = [
   { value: Term.THIRD, label: Term.THIRD },
 ];
 
+// A built-in "subject" every school gets for free — it never needs to be
+// created via Subjects management, always shows up when building a
+// timetable, and (like any activity) needs neither a teacher nor a period.
+export const LUNCH_SUBJECT_ID = "lunch";
+export const LUNCH_SUBJECT = {
+  id: LUNCH_SUBJECT_ID,
+  name: "Lunch",
+  code: null,
+  isActivity: true,
+} as const;
+
 export const Weekday = {
   MON: "MON",
   TUE: "TUE",

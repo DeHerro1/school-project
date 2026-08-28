@@ -3,11 +3,11 @@ import type { StudentDoc, GuardianshipDoc, UserDoc } from "../../utils/firebase"
 
 // Admin/teacher: list all students (optionally by class)
 export default defineEventHandler(async (event) => {
-  await requireUser(event, [Role.ADMIN, Role.TEACHER]);
+  const user = await requireUser(event, [Role.ADMIN, Role.TEACHER]);
   const query = getQuery(event);
   const classId = typeof query.classId === "string" ? query.classId : undefined;
 
-  let ref = collections.students() as FirebaseFirestore.Query;
+  let ref = collections.students().where("schoolId", "==", user.schoolId) as FirebaseFirestore.Query;
   if (classId) ref = ref.where("classId", "==", classId);
   const snap = await ref.get();
   const students = snap.docs.map((d) => ({ id: d.id, ...(d.data() as StudentDoc) }));

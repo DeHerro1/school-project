@@ -47,7 +47,7 @@ const allNav: NavItem[] = [
   { to: "/subjects", label: "Subjects", icon: BookOpen, roles: [Role.ADMIN] },
   { to: "/timetable", label: "Timetable", icon: CalendarDays, roles: [Role.ADMIN, Role.TEACHER] },
   { to: "/people", label: "Staff", icon: Users, roles: [Role.ADMIN] },
-  { to: "/parents", label: "Parents", icon: Users, roles: [Role.ADMIN] },
+  { to: "/parents", label: "Parent/Guardian", icon: Users, roles: [Role.ADMIN] },
   { to: "/fees", label: "Fees", icon: Receipt, roles: [Role.ADMIN] },
   { to: "/messages", label: "Messages", icon: MessageCircle, roles: [Role.ADMIN, Role.TEACHER] },
 ];
@@ -72,9 +72,9 @@ const isActive = (to: string) =>
       class="fixed inset-y-0 left-0 z-40 w-64 -translate-x-full border-r bg-background transition-transform lg:translate-x-0"
       :class="mobileOpen ? 'translate-x-0' : ''"
     >
-      <div class="flex h-16 items-center gap-2 border-b px-6">
-        <GraduationCap class="size-6 text-primary" />
-        <span class="text-lg font-bold">EduCore</span>
+      <div class="flex min-h-16 items-center gap-2 border-b px-6 py-3">
+        <GraduationCap class="size-6 shrink-0 text-primary" />
+        <span class="text-lg font-bold leading-tight">{{ auth.user?.schoolName || "EduCore" }}</span>
       </div>
       <nav class="flex flex-col gap-1 p-3">
         <NuxtLink
