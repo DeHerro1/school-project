@@ -2,7 +2,7 @@ import { createUserSchema, Role } from "@repo/shared";
 
 // Admin creates staff or parent accounts
 export default defineEventHandler(async (event) => {
-  await requireUser(event, [Role.ADMIN]);
+  const admin = await requireUser(event, [Role.ADMIN]);
   const body = await validateBody(event, createUserSchema);
 
   if (body.username) {
@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
     if (!clash.empty) throw httpError(409, "A record with these details already exists.");
   }
 
-  const created = await provisionUser(body);
+  const created = await provisionUser({ ...body, schoolId: admin.schoolId });
   setResponseStatus(event, 201);
   return { user: publicUser(created.id, created) };
 });

@@ -40,14 +40,6 @@ const studentOptions = computed(() =>
   })),
 );
 
-const photoFile = ref<File | null>(null);
-const photoPreview = ref<string>("");
-function onPhotoPick(e: Event) {
-  const f = (e.target as HTMLInputElement).files?.[0] ?? null;
-  photoFile.value = f;
-  photoPreview.value = f ? URL.createObjectURL(f) : "";
-}
-
 async function load() {
   loading.value = true;
   try {
@@ -66,8 +58,6 @@ onMounted(load);
 function resetForm() {
   form.value = { name: "", email: "", password: "", phone: "" };
   selectedStudentIds.value = [];
-  photoFile.value = null;
-  photoPreview.value = "";
   formError.value = "";
   fieldErrors.value = {};
 }
@@ -85,11 +75,6 @@ async function create() {
         phone: form.value.phone || undefined,
       },
     });
-    if (photoFile.value) {
-      const fd = new FormData();
-      fd.append("file", photoFile.value);
-      await api(`/users/${user.id}/avatar`, { method: "POST", body: fd });
-    }
     await Promise.all(
       selectedStudentIds.value.map((studentId) =>
         api("/students/guardianships", {
@@ -233,14 +218,6 @@ async function remove() {
     <Modal v-model:open="showAdd" title="New parent account">
       <form class="space-y-3" @submit.prevent="create">
         <Alert v-if="formError" variant="destructive">{{ formError }}</Alert>
-        <div class="flex items-center gap-3">
-          <Avatar :name="form.name" :src="photoPreview" class="size-16 text-lg" />
-          <label class="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-muted">
-            <UserPlus class="size-4" />
-            {{ photoFile ? "Change photo" : "Add photo" }}
-            <input type="file" accept="image/*" class="hidden" @change="onPhotoPick" />
-          </label>
-        </div>
         <div class="space-y-1.5">
           <Label>Full name</Label>
           <Input v-model="form.name" required :class="fieldErrors.name ? 'border-destructive' : ''" />

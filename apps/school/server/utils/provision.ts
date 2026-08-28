@@ -8,6 +8,7 @@ export interface ProvisionUserInput {
   phone?: string;
   role: Role;
   username?: string | null;
+  schoolId: string;
 }
 
 /**
@@ -42,6 +43,7 @@ export async function provisionUser(input: ProvisionUserInput): Promise<{ id: st
     phone: input.phone ?? null,
     avatarUrl: null,
     createdAt: new Date().toISOString(),
+    schoolId: input.schoolId,
   };
 
   try {

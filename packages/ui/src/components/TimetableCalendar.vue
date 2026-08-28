@@ -31,18 +31,17 @@ const fmtHour = (h: number): string => {
   return `${hour} ${period}`;
 };
 
-// The vertical window shown on the axis, derived from the slots (with a sane
-// school-day fallback), snapped out to whole hours.
+// The vertical window shown on the axis: always at least the school day
+// (8 AM–3 PM), stretched further out only if a slot falls outside it —
+// so a light day's timetable doesn't shrink down to just its few slots.
+const SCHOOL_DAY_START = 8 * 60;
+const SCHOOL_DAY_END = 15 * 60;
 const range = computed(() => {
-  let min = Infinity;
-  let max = -Infinity;
+  let min = SCHOOL_DAY_START;
+  let max = SCHOOL_DAY_END;
   for (const s of props.slots) {
     min = Math.min(min, toMinutes(s.startTime));
     max = Math.max(max, toMinutes(s.endTime));
-  }
-  if (!isFinite(min)) {
-    min = 8 * 60;
-    max = 16 * 60;
   }
   return { startHour: Math.floor(min / 60), endHour: Math.ceil(max / 60) };
 });

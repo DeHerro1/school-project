@@ -3,8 +3,9 @@ import type { InvoiceDoc, StudentDoc } from "../../utils/firebase";
 
 // Admin issues an invoice for a student's fees. Notifies parents.
 export default defineEventHandler(async (event) => {
-  await requireUser(event, [Role.ADMIN]);
+  const user = await requireUser(event, [Role.ADMIN]);
   const body = await validateBody(event, createInvoiceSchema);
+  await assertStudentInSchool(body.studentId, user.schoolId);
 
   const doc: InvoiceDoc = {
     studentId: body.studentId,
@@ -13,6 +14,7 @@ export default defineEventHandler(async (event) => {
     dueDate: new Date(body.dueDate).toISOString(),
     status: "UNPAID",
     createdAt: new Date().toISOString(),
+    schoolId: user.schoolId,
   };
   // A cuid-shaped id (see server/utils/id.ts) — recordPaymentSchema.invoiceId
   // validates it with `.cuid()`, so this can't be Firestore/the mock's own

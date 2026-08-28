@@ -10,6 +10,7 @@ export interface AuthUser {
   phone?: string | null;
   avatarUrl?: string | null;
   schoolId?: string | null;
+  schoolName?: string | null;
 }
 
 interface AuthState {

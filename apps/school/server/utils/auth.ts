@@ -52,6 +52,19 @@ export async function requireUser(event: H3Event, roles?: Role[]): Promise<Authe
   }
   const user = { id: docId, ...(snap.data() as UserDoc) };
 
+  // Every account is scoped to a school (see firebase.ts's UserDoc) — a
+  // profile without one predates that and every route below assumes it's
+  // there. Fail here with a clear message rather than downstream, e.g. as
+  // Firestore's own "Cannot use 'undefined' as a Firestore value" once some
+  // write tries to stamp it onto a new record. Run
+  // `pnpm --filter school backfill:schools` once to fix pre-existing data.
+  if (!user.schoolId) {
+    throw httpError(
+      409,
+      "Your account isn't linked to a school yet. Run the schoolId backfill migration, then sign in again.",
+    );
+  }
+
   if (roles && roles.length && !roles.includes(user.role)) {
     throw httpError(403, "You do not have access to this resource");
   }

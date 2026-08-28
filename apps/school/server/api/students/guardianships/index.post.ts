@@ -3,13 +3,15 @@ import type { UserDoc, GuardianshipDoc } from "../../../utils/firebase";
 
 // Link a parent as guardian of a student
 export default defineEventHandler(async (event) => {
-  await requireUser(event, [Role.ADMIN]);
+  const admin = await requireUser(event, [Role.ADMIN]);
   const body = await validateBody(event, linkGuardianSchema);
 
   const parentSnap = await collections.users().doc(body.parentUserId).get();
-  if (!parentSnap.exists || (parentSnap.data() as UserDoc).role !== Role.PARENT) {
+  const parent = parentSnap.exists ? (parentSnap.data() as UserDoc) : null;
+  if (!parent || parent.role !== Role.PARENT || parent.schoolId !== admin.schoolId) {
     throw httpError(400, "Selected user is not a parent account");
   }
+  await assertStudentInSchool(body.studentId, admin.schoolId);
 
   const doc: GuardianshipDoc = {
     parentUserId: body.parentUserId,

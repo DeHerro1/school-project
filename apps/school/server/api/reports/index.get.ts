@@ -8,6 +8,7 @@ export default defineEventHandler(async (event) => {
   const studentId = typeof query.studentId === "string" ? query.studentId : undefined;
   if (!studentId) throw httpError(400, "studentId is required");
   if (user.role === Role.PARENT) await assertParentOwnsStudent(user.id, studentId);
+  else await assertStudentInSchool(studentId, user.schoolId);
 
   const snap = await collections.termReports().where("studentId", "==", studentId).get();
   const reports = snap.docs

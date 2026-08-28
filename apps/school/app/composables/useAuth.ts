@@ -58,10 +58,16 @@ export function useAuth() {
       const res = await api<MeResponse>("/auth/me");
       auth.setUser(res.user);
       return res.user;
-    } catch {
+    } catch (e) {
       await signOut(firebaseAuth);
       auth.clear();
-      throw new Error(notRegisteredMessage);
+      // requireUser() only fails with 401 when there's genuinely no matching
+      // profile (see server/utils/auth.ts) — that's the friendly
+      // "not registered" case below. Any other failure (e.g. a 409 for an
+      // account that exists but isn't linked to a school yet) is real and
+      // actionable, so show it as-is instead of masking it behind that message.
+      const status = (e as { status?: number })?.status;
+      throw new Error(status === 401 ? notRegisteredMessage : apiError(e));
     }
   }
 

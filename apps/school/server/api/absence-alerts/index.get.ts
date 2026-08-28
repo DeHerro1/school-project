@@ -1,7 +1,8 @@
 import { Role } from "@repo/shared";
 import type { AbsenceAlertDoc, AttendanceDoc, StudentDoc } from "../../utils/firebase";
 
-// List recent absence alerts — parents only see alerts for their own children.
+// List recent absence alerts — parents only see alerts for their own
+// children; staff only see alerts for their own school's students.
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event);
 
@@ -10,18 +11,8 @@ export default defineEventHandler(async (event) => {
     .map((d) => ({ id: d.id, ...(d.data() as AbsenceAlertDoc) }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  if (user.role === Role.PARENT) {
-    const myStudentIds = new Set(await parentStudentIds(user.id));
-    const attendanceForFilter = alerts.length
-      ? await adminDb().getAll(...alerts.map((a) => collections.attendance().doc(a.attendanceId)))
-      : [];
-    const studentIdByAttendanceId = new Map(
-      attendanceForFilter.filter((d) => d.exists).map((d) => [d.id, (d.data() as AttendanceDoc).studentId]),
-    );
-    alerts = alerts.filter((a) => myStudentIds.has(studentIdByAttendanceId.get(a.attendanceId) ?? ""));
-  }
-  alerts = alerts.slice(0, 50);
-
+  // Resolve attendance -> student up front (once) so both the ownership
+  // filter below and the response payload reuse the same fetch.
   const attendanceDocs = alerts.length
     ? await adminDb().getAll(...alerts.map((a) => collections.attendance().doc(a.attendanceId)))
     : [];
@@ -33,6 +24,17 @@ export default defineEventHandler(async (event) => {
     ? await adminDb().getAll(...studentIds.map((id) => collections.students().doc(id)))
     : [];
   const studentById = new Map(studentDocs.filter((d) => d.exists).map((d) => [d.id, d.data() as StudentDoc]));
+
+  if (user.role === Role.PARENT) {
+    const myStudentIds = new Set(await parentStudentIds(user.id));
+    alerts = alerts.filter((a) => myStudentIds.has(attendanceById.get(a.attendanceId)?.studentId ?? ""));
+  } else {
+    alerts = alerts.filter((a) => {
+      const studentId = attendanceById.get(a.attendanceId)?.studentId;
+      return !!studentId && studentById.get(studentId)?.schoolId === user.schoolId;
+    });
+  }
+  alerts = alerts.slice(0, 50);
 
   return {
     alerts: alerts.map((a) => {

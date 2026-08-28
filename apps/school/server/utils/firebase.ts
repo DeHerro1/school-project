@@ -68,6 +68,19 @@ export function adminBucket() {
 // Firestore is untyped by default; these narrow the common collections so
 // route handlers get `.data()` shapes without repeating `as X` everywhere.
 
+// A tenant: every ADMIN/TEACHER/PARENT account, and everything they create
+// (classes, subjects, students, ...), belongs to exactly one school. Created
+// either by the landing page's self-signup (see auth/register.post.ts) or,
+// eventually, by schools-backoffice.
+export interface SchoolDoc {
+  name: string;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  status: "ACTIVE" | "SUSPENDED";
+  createdAt: string;
+}
+
 export interface UserDoc {
   email: string;
   username: string | null;
@@ -76,6 +89,8 @@ export interface UserDoc {
   phone: string | null;
   avatarUrl: string | null;
   createdAt: string;
+  // Tenant this user belongs to — see SchoolDoc.
+  schoolId: string;
 }
 
 export interface ClassDoc {
@@ -85,20 +100,25 @@ export interface ClassDoc {
   studentCount: number | null;
   subjectsOffered: string | null;
   createdAt: string;
+  schoolId: string;
 }
 
 export interface SubjectDoc {
   name: string;
   code: string | null;
   isActivity: boolean;
+  schoolId: string;
 }
 
 export interface TimetableSlotDoc {
   classId: string;
+  // May be the reserved LUNCH_SUBJECT_ID literal instead of a real
+  // `subjects` doc id — see @repo/shared's subjectIdSchema.
   subjectId: string;
   teacherId: string | null;
   day: "MON" | "TUE" | "WED" | "THU" | "FRI";
-  period: number;
+  // Null for Lunch — it isn't assigned to a numbered period.
+  period: number | null;
   startTime: string | null;
   endTime: string | null;
 }
@@ -117,6 +137,7 @@ export interface StudentDoc {
   secondaryGuardianPhone: string | null;
   address: string | null;
   createdAt: string;
+  schoolId: string;
 }
 
 export interface GuardianshipDoc {
@@ -209,6 +230,9 @@ export interface InvoiceDoc {
   dueDate: string;
   status: "UNPAID" | "PARTIAL" | "PAID";
   createdAt: string;
+  // Denormalized from the student — lets the whole-school invoice list (no
+  // studentId given) be scoped without an extra join per invoice.
+  schoolId: string;
 }
 
 export interface PaymentDoc {
@@ -227,6 +251,7 @@ export interface MessageDoc {
 }
 
 export const collections = {
+  schools: () => adminDb().collection("schools"),
   users: () => adminDb().collection("users"),
   classes: () => adminDb().collection("classes"),
   subjects: () => adminDb().collection("subjects"),

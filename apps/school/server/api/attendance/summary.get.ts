@@ -1,18 +1,24 @@
 import { Role, AttendanceStatus } from "@repo/shared";
-import type { ClassDoc, StudentDoc, AttendanceDoc } from "../../utils/firebase";
+import type { ClassDoc, AttendanceDoc } from "../../utils/firebase";
 
 // Per-class attendance summary for a given day (admin/head overview).
 // One card per class: total students, present and absent counts.
 export default defineEventHandler(async (event) => {
-  await requireUser(event, [Role.ADMIN, Role.TEACHER]);
+  const user = await requireUser(event, [Role.ADMIN, Role.TEACHER]);
   const query = getQuery(event);
   const date = dateOnly(typeof query.date === "string" ? query.date : undefined);
 
+  // Sorted in memory rather than via orderBy() — see classes/index.get.ts.
+  // Both classes and students are scoped to the caller's own school; the
+  // attendance query stays date-only (no schoolId on AttendanceDoc) — records
+  // for other schools' students are dropped below via classByStudent, which
+  // is itself school-scoped.
   const [classesSnap, studentsSnap, attendanceSnap] = await Promise.all([
-    collections.classes().orderBy("name", "asc").get(),
-    collections.students().select("classId").get(),
+    collections.classes().where("schoolId", "==", user.schoolId).get(),
+    collections.students().where("schoolId", "==", user.schoolId).select("classId").get(),
     collections.attendance().where("date", "==", date).get(),
   ]);
+  classesSnap.docs.sort((a, b) => (a.data() as ClassDoc).name.localeCompare((b.data() as ClassDoc).name));
 
   const totalByClass = new Map<string, number>();
   for (const d of studentsSnap.docs) {
@@ -21,10 +27,10 @@ export default defineEventHandler(async (event) => {
     totalByClass.set(classId, (totalByClass.get(classId) ?? 0) + 1);
   }
 
-  // studentId -> classId, so each attendance record can be tallied by class.
-  const studentClassSnap = await collections.students().get();
+  // studentId -> classId, so each attendance record can be tallied by class
+  // (reuses studentsSnap — already scoped and already selecting classId).
   const classByStudent = new Map(
-    studentClassSnap.docs.map((d) => [d.id, (d.data() as StudentDoc).classId]),
+    studentsSnap.docs.map((d) => [d.id, (d.data() as { classId: string | null }).classId]),
   );
 
   const tally = new Map<string, { present: number; absent: number; late: number }>();

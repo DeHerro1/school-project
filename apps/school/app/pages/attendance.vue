@@ -180,14 +180,6 @@ const form = ref(emptyForm());
 const formError = ref("");
 const fieldErrors = ref<Record<string, string>>({});
 
-const photoFile = ref<File | null>(null);
-const photoPreview = ref("");
-function onPhotoPick(e: Event) {
-  const f = (e.target as HTMLInputElement).files?.[0] ?? null;
-  photoFile.value = f;
-  photoPreview.value = f ? URL.createObjectURL(f) : "";
-}
-
 async function createStudent() {
   saving.value = true;
   formError.value = "";
@@ -199,17 +191,10 @@ async function createStudent() {
         ([, v]) => v !== "",
       ),
     );
-    const { student } = await api<{ student: any }>("/students", { method: "POST", body: payload });
-    if (photoFile.value) {
-      const fd = new FormData();
-      fd.append("file", photoFile.value);
-      await api(`/students/${student.id}/photo`, { method: "POST", body: fd });
-    }
+    await api<{ student: any }>("/students", { method: "POST", body: payload });
     toast({ title: "Student added", variant: "success" });
     showAdd.value = false;
     form.value = emptyForm();
-    photoFile.value = null;
-    photoPreview.value = "";
     await loadRoster();
   } catch (e) {
     const fields = apiFieldErrors(e);
@@ -399,14 +384,6 @@ async function createStudent() {
     <Modal v-model:open="showAdd" title="Add student" :description="currentClassName ? `Enrolling into ${currentClassName}.` : undefined">
       <form class="space-y-3" @submit.prevent="createStudent">
         <Alert v-if="formError" variant="destructive">{{ formError }}</Alert>
-        <div class="flex items-center gap-4">
-          <Avatar :name="`${form.firstName} ${form.lastName}`" :src="photoPreview" class="size-16 text-lg" />
-          <label class="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-muted">
-            <UserPlus class="size-4" />
-            {{ photoFile ? "Change photo" : "Add photo" }}
-            <input type="file" accept="image/*" class="hidden" @change="onPhotoPick" />
-          </label>
-        </div>
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-1.5">
             <Label>First name</Label>

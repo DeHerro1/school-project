@@ -5,7 +5,7 @@ import {
   Button, Select, Modal, Label, Input, Skeleton, EmptyState, useToast, Alert,
   TimetableCalendar,
 } from "@repo/ui";
-import { Weekday } from "@repo/shared";
+import { LUNCH_SUBJECT_ID, Weekday } from "@repo/shared";
 import { useAuthStore } from "~/stores/auth";
 
 const api = useApi();
@@ -62,9 +62,12 @@ onMounted(async () => {
 });
 
 const classOptions = computed(() => classes.value.map((c) => ({ value: c.id, label: c.name })));
-const subjectOptions = computed(() =>
-  subjects.value.map((s) => ({ value: s.id, label: s.isActivity ? `${s.name} (activity)` : s.name })),
-);
+// Lunch is a built-in option, not one the school has to create under
+// Subjects — it always shows up, first, on every class's timetable.
+const subjectOptions = computed(() => [
+  { value: LUNCH_SUBJECT_ID, label: "Lunch" },
+  ...subjects.value.map((s) => ({ value: s.id, label: s.isActivity ? `${s.name} (activity)` : s.name })),
+]);
 const teacherOptions = computed(() => teachers.value.map((t) => ({ value: t.id, label: t.name })));
 const dayOptions = days.map((d) => ({ value: d, label: dayLabels[d] }));
 
@@ -82,15 +85,19 @@ const editForm = ref({
 const editFormError = ref("");
 const editFieldErrors = ref<Record<string, string>>({});
 
-// Activity subjects (Lunch, Worship, …) don't need a teacher.
+// Activity subjects (Lunch, Worship, …) don't need a teacher; Lunch also
+// doesn't need a period.
 const isActivity = (subjectId: string) =>
-  subjects.value.find((s) => s.id === subjectId)?.isActivity ?? false;
+  subjectId === LUNCH_SUBJECT_ID || (subjects.value.find((s) => s.id === subjectId)?.isActivity ?? false);
+const isLunch = (subjectId: string) => subjectId === LUNCH_SUBJECT_ID;
 const isValid = (f: { subjectId: string; startTime: string; endTime: string; teacherId: string }) =>
   !!f.subjectId && !!f.startTime && !!f.endTime && (isActivity(f.subjectId) || !!f.teacherId);
 
 const selectedIsActivity = computed(() => isActivity(form.value.subjectId));
+const selectedIsLunch = computed(() => isLunch(form.value.subjectId));
 const canSubmit = computed(() => isValid(form.value));
 const editIsActivity = computed(() => isActivity(editForm.value.subjectId));
+const editIsLunch = computed(() => isLunch(editForm.value.subjectId));
 const canSubmitEdit = computed(() => isValid(editForm.value));
 
 async function loadSlots() {
@@ -113,7 +120,8 @@ async function create() {
       body: {
         classId: classId.value,
         ...form.value,
-        period: Number(form.value.period),
+        // Lunch carries no period.
+        period: selectedIsLunch.value ? undefined : Number(form.value.period),
         // Activity slots carry no teacher.
         teacherId: selectedIsActivity.value ? undefined : form.value.teacherId || undefined,
       },
@@ -158,7 +166,8 @@ async function update() {
       body: {
         subjectId: editForm.value.subjectId,
         day: editForm.value.day,
-        period: Number(editForm.value.period),
+        // Lunch carries no period; null clears any existing one.
+        period: editIsLunch.value ? null : Number(editForm.value.period),
         startTime: editForm.value.startTime,
         endTime: editForm.value.endTime,
         // Activity slots carry no teacher; null clears any existing one.
@@ -256,9 +265,9 @@ async function remove(id: string) {
         <p v-else class="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
           This slot will be assigned to you ({{ auth.user?.name }}).
         </p>
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid gap-3" :class="!form.repeat && !selectedIsLunch ? 'grid-cols-2' : ''">
           <div v-if="!form.repeat" class="space-y-1.5"><Label>Day</Label><Select v-model="form.day" :options="dayOptions" /></div>
-          <div class="space-y-1.5">
+          <div v-if="!selectedIsLunch" class="space-y-1.5">
             <Label>Period</Label>
             <Input v-model="form.period" type="number" min="1" max="12" :class="fieldErrors.period ? 'border-destructive' : ''" />
             <p v-if="fieldErrors.period" class="text-xs text-destructive">{{ fieldErrors.period }}</p>
@@ -298,9 +307,9 @@ async function remove(id: string) {
         <p v-else class="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
           This slot is assigned to you ({{ auth.user?.name }}).
         </p>
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid gap-3" :class="!editIsLunch ? 'grid-cols-2' : ''">
           <div class="space-y-1.5"><Label>Day</Label><Select v-model="editForm.day" :options="dayOptions" /></div>
-          <div class="space-y-1.5">
+          <div v-if="!editIsLunch" class="space-y-1.5">
             <Label>Period</Label>
             <Input v-model="editForm.period" type="number" min="1" max="12" :class="editFieldErrors.period ? 'border-destructive' : ''" />
             <p v-if="editFieldErrors.period" class="text-xs text-destructive">{{ editFieldErrors.period }}</p>

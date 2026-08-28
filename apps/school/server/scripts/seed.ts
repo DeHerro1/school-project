@@ -42,6 +42,7 @@ async function upsertAccount(opts: {
   password: string;
   name: string;
   role: "ADMIN" | "TEACHER" | "PARENT";
+  schoolId: string;
 }) {
   let uid: string;
   try {
@@ -65,6 +66,7 @@ async function upsertAccount(opts: {
     phone: null,
     avatarUrl: null,
     createdAt: new Date().toISOString(),
+    schoolId: opts.schoolId,
   });
   console.log(`  ${opts.role} ${opts.username ?? opts.email} -> ${uid}`);
   return uid;
@@ -95,6 +97,16 @@ async function findOrCreate(
 }
 
 async function main() {
+  console.log("Seeding the demo school...");
+  const schoolId = await findOrCreate("schools", "name", "Sunrise International School", {
+    name: "Sunrise International School",
+    email: "admin@school.test",
+    phone: null,
+    address: null,
+    status: "ACTIVE",
+    createdAt: new Date().toISOString(),
+  });
+
   console.log("Seeding staff accounts (password: password123)...");
   await upsertAccount({
     email: "admin@school.test",
@@ -102,6 +114,7 @@ async function main() {
     password: "password123",
     name: "The Headmaster",
     role: "ADMIN",
+    schoolId,
   });
   const teacherId = await upsertAccount({
     email: "sarah@school.test",
@@ -109,6 +122,7 @@ async function main() {
     password: "password123",
     name: "Sarah Mensah",
     role: "TEACHER",
+    schoolId,
   });
 
   console.log("Seeding a parent account...");
@@ -118,6 +132,7 @@ async function main() {
     password: "password123",
     name: "Mary Owusu",
     role: "PARENT",
+    schoolId,
   });
 
   console.log("Seeding a class and subjects...");
@@ -130,12 +145,13 @@ async function main() {
     studentCount: null,
     subjectsOffered: null,
     createdAt: new Date().toISOString(),
+    schoolId,
   });
   console.log(`  Nursery A -> ${classId} (homeroom: sarah)`);
 
   const subjectIds: string[] = [];
   for (const name of ["Numeracy", "Literacy", "Creative Arts"]) {
-    const id = await findOrCreate("subjects", "name", name, { name, code: null, isActivity: false });
+    const id = await findOrCreate("subjects", "name", name, { name, code: null, isActivity: false, schoolId });
     subjectIds.push(id);
     console.log(`  Subject: ${name}`);
   }
@@ -155,6 +171,7 @@ async function main() {
     secondaryGuardianPhone: null,
     address: "12 Palm Avenue, East Legon",
     createdAt: new Date().toISOString(),
+    schoolId,
   });
   const guardianships = db.collection("guardianships");
   const existingLink = await guardianships
@@ -248,6 +265,7 @@ async function main() {
       dueDate: new Date(2026, 8, 30).toISOString(),
       status: "PARTIAL",
       createdAt: new Date().toISOString(),
+      schoolId,
     });
     await db.collection("payments").doc(newId()).set({
       invoiceId,

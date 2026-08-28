@@ -3,13 +3,13 @@ import type { InvoiceDoc, PaymentDoc } from "../../../utils/firebase";
 
 // Record a payment against an invoice and recompute its status.
 export default defineEventHandler(async (event) => {
-  await requireUser(event, [Role.ADMIN]);
+  const user = await requireUser(event, [Role.ADMIN]);
   const body = await validateBody(event, recordPaymentSchema);
 
   const invoiceRef = collections.invoices().doc(body.invoiceId);
   const invoiceSnap = await invoiceRef.get();
-  if (!invoiceSnap.exists) throw httpError(404, "Invoice not found");
-  const invoice = invoiceSnap.data() as InvoiceDoc;
+  const invoice = invoiceSnap.exists ? (invoiceSnap.data() as InvoiceDoc) : null;
+  if (!invoice || invoice.schoolId !== user.schoolId) throw httpError(404, "Invoice not found");
 
   const paymentDoc: PaymentDoc = {
     invoiceId: body.invoiceId,

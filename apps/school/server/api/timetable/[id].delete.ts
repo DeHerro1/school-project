@@ -6,13 +6,17 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, "id")!;
   const ref = collections.timetableSlots().doc(id);
 
-  // Teachers may only remove their own slots; admins may remove any.
+  // Teachers may only remove their own slots; admins may remove any of
+  // their own school's.
+  const snap = await ref.get();
+  if (!snap.exists) throw httpError(404, "Timetable slot not found");
+  const slot = snap.data() as TimetableSlotDoc;
   if (user.role === Role.TEACHER) {
-    const snap = await ref.get();
-    if (!snap.exists) throw httpError(404, "Timetable slot not found");
-    if ((snap.data() as TimetableSlotDoc).teacherId !== user.id) {
+    if (slot.teacherId !== user.id) {
       throw httpError(403, "Staff can only remove their own timetable slots");
     }
+  } else {
+    await assertClassInSchool(slot.classId, user.schoolId);
   }
   await ref.delete();
   setResponseStatus(event, 204);

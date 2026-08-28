@@ -2,13 +2,15 @@ import { updateUserSchema, Role } from "@repo/shared";
 import type { UserDoc } from "../../utils/firebase";
 
 export default defineEventHandler(async (event) => {
-  await requireUser(event, [Role.ADMIN]);
+  const admin = await requireUser(event, [Role.ADMIN]);
   const id = getRouterParam(event, "id")!;
   const body = await validateBody(event, updateUserSchema);
 
   const ref = collections.users().doc(id);
   const existing = await ref.get();
-  if (!existing.exists) throw httpError(404, "User not found");
+  if (!existing.exists || (existing.data() as UserDoc).schoolId !== admin.schoolId) {
+    throw httpError(404, "User not found");
+  }
 
   if (body.password) {
     try {

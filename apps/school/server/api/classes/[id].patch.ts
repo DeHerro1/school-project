@@ -12,7 +12,9 @@ export default defineEventHandler(async (event) => {
 
   const ref = collections.classes().doc(id);
   const existing = await ref.get();
-  if (!existing.exists) throw httpError(404, "Class not found");
+  if (!existing.exists || (existing.data() as ClassDoc).schoolId !== user.schoolId) {
+    throw httpError(404, "Class not found");
+  }
   await ref.update(body as Partial<ClassDoc>);
 
   const updated = await ref.get();

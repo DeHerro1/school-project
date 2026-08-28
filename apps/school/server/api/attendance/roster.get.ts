@@ -8,8 +8,10 @@ export default defineEventHandler(async (event) => {
   const classId = typeof query.classId === "string" ? query.classId : undefined;
   if (!classId) throw httpError(400, "classId is required");
 
-  // Homeroom teachers may only load the roster for their own class.
+  // Homeroom teachers may only load the roster for their own class; admins
+  // only their own school's.
   if (user.role === Role.TEACHER) await assertTeacherOwnsClass(user.id, classId);
+  else await assertClassInSchool(classId, user.schoolId);
 
   const date = dateOnly(typeof query.date === "string" ? query.date : undefined);
 

@@ -48,15 +48,6 @@ const form = ref(emptyForm());
 const formError = ref("");
 const fieldErrors = ref<Record<string, string>>({});
 
-// Optional profile photo, uploaded after the student record is created.
-const photoFile = ref<File | null>(null);
-const photoPreview = ref<string>("");
-function onPhotoPick(e: Event) {
-  const f = (e.target as HTMLInputElement).files?.[0] ?? null;
-  photoFile.value = f;
-  photoPreview.value = f ? URL.createObjectURL(f) : "";
-}
-
 async function load() {
   loading.value = true;
   try {
@@ -80,6 +71,13 @@ const filtered = computed(() =>
   ),
 );
 
+// Prefer a linked parent-portal account's name; fall back to the plain-text
+// guardian contact captured at enrolment (see createStudentSchema).
+const guardianDisplay = (s: any) =>
+  s.guardianships?.length
+    ? s.guardianships.map((g: any) => g.parent?.name).filter(Boolean).join(", ") || "—"
+    : (s.guardianName ?? "—");
+
 const classOptions = computed(() =>
   classes.value.map((c) => ({ value: c.id, label: c.name })),
 );
@@ -95,18 +93,10 @@ async function createStudent() {
         ([, v]) => v !== "",
       ),
     );
-    const { student } = await api<{ student: any }>("/students", { method: "POST", body: payload });
-    // Upload the profile photo once the student record exists.
-    if (photoFile.value) {
-      const fd = new FormData();
-      fd.append("file", photoFile.value);
-      await api(`/students/${student.id}/photo`, { method: "POST", body: fd });
-    }
+    await api<{ student: any }>("/students", { method: "POST", body: payload });
     toast({ title: "Student added", variant: "success" });
     showAdd.value = false;
     form.value = emptyForm();
-    photoFile.value = null;
-    photoPreview.value = "";
     await load();
   } catch (e) {
     const fields = apiFieldErrors(e);
@@ -167,7 +157,7 @@ async function createStudent() {
               <TableHead>Student</TableHead>
               <TableHead>Admission&nbsp;No</TableHead>
               <TableHead>Class</TableHead>
-              <TableHead>Guardians</TableHead>
+              <TableHead>Parent/Guardian</TableHead>
               <TableHead></TableHead>
             </TableRow>
           </TableHeader>
@@ -186,7 +176,7 @@ async function createStudent() {
               </TableCell>
               <TableCell class="text-muted-foreground">{{ s.admissionNo }}</TableCell>
               <TableCell>{{ s.class?.name ?? "—" }}</TableCell>
-              <TableCell class="text-muted-foreground">{{ s.guardianships?.length ?? 0 }}</TableCell>
+              <TableCell class="text-muted-foreground">{{ guardianDisplay(s) }}</TableCell>
               <TableCell>
                 <Button variant="outline" size="sm" :as="'div'">
                   <NuxtLink :to="`/students/${s.id}`">Open</NuxtLink>
@@ -206,14 +196,6 @@ async function createStudent() {
     <Modal v-model:open="showAdd" title="Add student" description="Enrol a new student.">
       <form class="space-y-3" @submit.prevent="createStudent">
         <Alert v-if="formError" variant="destructive">{{ formError }}</Alert>
-        <div class="flex items-center gap-3">
-          <Avatar :name="`${form.firstName} ${form.lastName}`" :src="photoPreview" class="size-16 text-lg" />
-          <label class="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-muted">
-            <UserPlus class="size-4" />
-            {{ photoFile ? "Change photo" : "Add photo" }}
-            <input type="file" accept="image/*" class="hidden" @change="onPhotoPick" />
-          </label>
-        </div>
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-1.5">
             <Label>First name</Label>

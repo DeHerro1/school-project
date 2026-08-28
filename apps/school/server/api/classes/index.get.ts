@@ -2,12 +2,16 @@ import { Role } from "@repo/shared";
 import type { ClassDoc, UserDoc } from "../../utils/firebase";
 
 export default defineEventHandler(async (event) => {
-  await requireUser(event, [Role.ADMIN, Role.TEACHER]);
+  const user = await requireUser(event, [Role.ADMIN, Role.TEACHER]);
 
+  // Sorted in memory rather than via orderBy() — combining the schoolId
+  // equality filter with orderBy on a different field needs a composite
+  // index on real Firestore that isn't deployed (see users/index.get.ts).
   const [classesSnap, studentsSnap] = await Promise.all([
-    collections.classes().orderBy("name", "asc").get(),
-    collections.students().select("classId").get(),
+    collections.classes().where("schoolId", "==", user.schoolId).get(),
+    collections.students().where("schoolId", "==", user.schoolId).select("classId").get(),
   ]);
+  classesSnap.docs.sort((a, b) => (a.data() as ClassDoc).name.localeCompare((b.data() as ClassDoc).name));
 
   const studentCountByClass = new Map<string, number>();
   for (const d of studentsSnap.docs) {
