@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { applicationDefault, getApps, initializeApp, type App } from "firebase-admin/app";
+import { applicationDefault, cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -20,10 +20,25 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  * Firestore/Storage, by contrast, use a local, file-persisted, Node-only
  * stand-in (mockFirestore.ts / localStorage.ts) instead of the (Java-
  * requiring) Firestore/Storage emulators — see USE_REAL_FIREBASE below.
- * Set GOOGLE_APPLICATION_CREDENTIALS (a service-account JSON path) to point
- * every one of these at a real Firebase project instead.
+ *
+ * Two ways to point every one of these at a real Firebase project instead:
+ *   - GOOGLE_APPLICATION_CREDENTIALS: a service-account JSON *file path* —
+ *     local dev, or a host that lets you place a file on disk (e.g. Cloud
+ *     Run with a mounted secret).
+ *   - FIREBASE_SERVICE_ACCOUNT: the service-account JSON *contents*, as one
+ *     env var — for hosts with no writable/persistent filesystem at deploy
+ *     time (Vercel, Netlify, ...). Paste the whole service-account.json
+ *     as the value of this var in the host's dashboard.
+ * If both are set, GOOGLE_APPLICATION_CREDENTIALS wins (matches local dev,
+ * where it's the one actually pointing at a real file).
  */
-export const USE_REAL_FIREBASE = !!process.env.GOOGLE_APPLICATION_CREDENTIALS;
+export const USE_REAL_FIREBASE =
+  !!process.env.GOOGLE_APPLICATION_CREDENTIALS || !!process.env.FIREBASE_SERVICE_ACCOUNT;
+
+function credential() {
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) return applicationDefault();
+  return cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT!));
+}
 
 let app: App;
 
@@ -39,7 +54,7 @@ function getApp(): App {
         // Omitted entirely (not just `undefined`) when there's no real
         // project — firebase-admin rejects an explicit `credential: undefined`
         // key. No real credentials are needed to talk to the Auth emulator.
-        ...(USE_REAL_FIREBASE ? { credential: applicationDefault() } : {}),
+        ...(USE_REAL_FIREBASE ? { credential: credential() } : {}),
       });
   }
   return app;
