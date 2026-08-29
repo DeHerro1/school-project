@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { applicationDefault, getApps, initializeApp, type App } from "firebase-admin/app";
+import { applicationDefault, cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { MockFirestore } from "./mockFirestore";
@@ -11,12 +11,22 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  * Trimmed copy of apps/school/server/utils/firebase.ts — this app reads/writes
  * only its own `platformAdmins` collection (see server/api/platform-admins/**),
  * and uses Auth to verify platform-admin sign-ins and provision new admin
- * accounts — no Storage. Set GOOGLE_APPLICATION_CREDENTIALS to point this at
- * the same real Firebase project as apps/school (platform admins are a
- * separate Auth/Firestore concern from that app's ADMIN/TEACHER/PARENT users,
- * but sharing one project keeps local dev to a single emulator/service account).
+ * accounts — no Storage. Points this at the same real Firebase project as
+ * apps/school (platform admins are a separate Auth/Firestore concern from
+ * that app's ADMIN/TEACHER/PARENT users, but sharing one project keeps local
+ * dev to a single emulator/service account) via either:
+ *   - GOOGLE_APPLICATION_CREDENTIALS: a service-account JSON *file path*.
+ *   - FIREBASE_SERVICE_ACCOUNT: the service-account JSON *contents*, for
+ *     hosts with no writable/persistent filesystem at deploy time (Vercel,
+ *     Netlify, ...) — see apps/school/server/utils/firebase.ts for details.
  */
-export const USE_REAL_FIREBASE = !!process.env.GOOGLE_APPLICATION_CREDENTIALS;
+export const USE_REAL_FIREBASE =
+  !!process.env.GOOGLE_APPLICATION_CREDENTIALS || !!process.env.FIREBASE_SERVICE_ACCOUNT;
+
+function credential() {
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) return applicationDefault();
+  return cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT!));
+}
 
 let app: App;
 
@@ -28,7 +38,7 @@ function getApp(): App {
       existing[0] ??
       initializeApp({
         projectId: config.firebaseProjectId,
-        ...(USE_REAL_FIREBASE ? { credential: applicationDefault() } : {}),
+        ...(USE_REAL_FIREBASE ? { credential: credential() } : {}),
       });
   }
   return app;
