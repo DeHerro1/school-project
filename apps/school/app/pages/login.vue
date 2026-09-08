@@ -50,11 +50,6 @@ async function onGoogleSignIn() {
     googleLoading.value = false;
   }
 }
-
-function fill(u: string) {
-  username.value = u;
-  password.value = "password123";
-}
 </script>
 
 <template>
@@ -110,21 +105,6 @@ function fill(u: string) {
         </div>
         <Button type="submit" class="w-full" :loading="loading" :disabled="googleLoading">Sign in</Button>
       </form>
-
-      <div class="mt-6 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-        <p class="mb-2 font-medium text-foreground">Demo accounts (password: password123)</p>
-        <div class="flex flex-wrap gap-2">
-          <button class="rounded bg-muted px-2 py-1 hover:bg-accent" @click="fill('admin')">
-            Admin
-          </button>
-          <button class="rounded bg-muted px-2 py-1 hover:bg-accent" @click="fill('sarah')">
-            Teacher
-          </button>
-          <button class="rounded bg-muted px-2 py-1 hover:bg-accent" @click="fill('mary@parent.test')">
-            Parent
-          </button>
-        </div>
-      </div>
     </CardContent>
   </Card>
 </template>
